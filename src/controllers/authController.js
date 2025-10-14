@@ -225,7 +225,6 @@ export const refreshAccessToken = async (req, res) => {
         process.env.JWT_SECRET,
         { expiresIn: "1h" }
       );
-
       res.json({
         message: "New access token generated successfully",
         accessToken: newAccessToken,
