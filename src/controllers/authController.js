@@ -78,3 +78,22 @@ export const setUserPin = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Verify user's pin 
+export const verifyUserPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!user || !user.pin)
+      return res.status(404).json({ message: "No PIN found for this user" });
+
+    const isMatch = await bcrypt.compare(pin, user.pin);
+    if (!isMatch)
+      return res.status(401).json({ message: "Incorrect PIN" });
+
+    res.json({ message: "PIN verified successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
