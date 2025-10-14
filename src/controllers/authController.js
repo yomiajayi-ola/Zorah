@@ -97,3 +97,26 @@ export const verifyUserPin = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Toggle biometric authentication
+export const toggleBiometric = async (req, res) => {
+  try {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== "boolean")
+      return res.status(400).json({ message: "Enabled must be true or false" });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    User.biometricEnabled = enabled;
+    await user.save();
+
+    res.json({
+      message: `Biometric authentication ${enabled ? "enabled" : "disabled"} successfully`,
+      biometricEnabled: user.biometricEnabled,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
