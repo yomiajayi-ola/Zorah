@@ -10,11 +10,19 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(express.json());
+app.use(express.json( { strict: true }));
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ message: "Invalid JSON format in request body" });
+  }
+  next();
+});
 app.use(cors());
 
 // Routes
 app.use("/api/auth", authRoutes);
+
+
 
 
 

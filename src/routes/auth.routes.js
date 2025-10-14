@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, loginUser, getProfile, setUserPin, verifyUserPin, toggleBiometric, requestPasswordReset, resetPassword } from "../controllers/authController.js";
+import { registerUser, loginUser, getProfile, setUserPin, verifyUserPin, toggleBiometric, requestPasswordReset, resetPassword, refreshAccessToken } from "../controllers/authController.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -9,6 +9,7 @@ router.post("/login", loginUser);
 router.get("/profile", protect, getProfile);
 router.post("/request-reset", requestPasswordReset);
 router.post("/reset-password", resetPassword);
+router.post("/refresh-token", refreshAccessToken)
 
 
 // PIN $ biometric routes

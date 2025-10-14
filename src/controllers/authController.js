@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { access } from "fs";
 
 
 const generateToken = (id) => {
@@ -35,19 +36,40 @@ export const registerUser = async (req, res) => {
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
 
-    if (user && (await user.matchPassword(password))) {
-      const token = generateToken(user._id);
-      res.json({
-        _id: user._id,
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ message: "Invalid email or password" });
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
+
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    const refreshToken = jwt.sign(
+      { id: user._id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Optionally store refreshToken in DB if you want to invalidate later
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.json({
+      message: "Login successful",
+      user: {
+        id: user._id,
         name: user.name,
         email: user.email,
-        token,
-      });
-    } else {
-      res.status(401).json({ message: "Invalid email or password" });
-    }
+      },
+      accessToken,
+      refreshToken,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -175,3 +197,41 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 }
+
+// Refresh access token 
+export const refreshAccessToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken) {
+      return res.status(401).json({ message: "No refresh token provided" });
+    }
+
+    // Verify refresh token
+    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+      if (err) return res.status(403).json({ message: "Invalid or expired refresh token" });
+
+      // Confirm the user still exists
+      const user = await User.findById(decoded.id || decoded._id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      // (Optional) - Save refreshToken in DB:
+      // if (user.refreshToken !== refreshToken) {
+      //   return res.status(403).json({ message: "Refresh token mismatch" });
+      // }
+
+      // Generate a new access token
+      const newAccessToken = jwt.sign(
+        { id: user._id },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      res.json({
+        message: "New access token generated successfully",
+        accessToken: newAccessToken,
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
