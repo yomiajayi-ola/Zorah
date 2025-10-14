@@ -22,3 +22,13 @@ export const addExpense = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc Get All expenses for user 
+export const getExpense = async (req, res) => {
+    try {
+        const expenses = await Expense.find({ user: req.user.id}).sort({ date: -1 });
+        res.json(expenses);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
