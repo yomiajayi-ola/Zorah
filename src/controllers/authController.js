@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 
 const generateToken = (id) => {
@@ -116,6 +117,30 @@ export const toggleBiometric = async (req, res) => {
       message: `Biometric authentication ${enabled ? "enabled" : "disabled"} successfully`,
       biometricEnabled: user.biometricEnabled,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
+
+// Reqquest Password reset 
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user ) return res.status(404).json({ message: "User not found" });
+
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    const resetExpires = Date.now() + 10 * 60 * 10000; // 10mins
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = resetExpires;
+    await user.save();
+
+    // Instead of emanil for now;
+    console.log(`Reset Token (temporary): ${resetToken}`);
+
+    res.json({ message: "Password reset token generated (check console)" });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
