@@ -1,5 +1,7 @@
 import User from "../models/User.js";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
@@ -55,4 +57,24 @@ export const getProfile = async (req, res) => {
   const user = await User.findById(req.user.id).select("-password");
   if (!user) return res.status(404).json({ message: "User not found" });
   res.json(user);
+};
+
+// Set or update a user's pin 
+export const setUserPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin || pin.length < 4)
+      return res.status(400).json({ message: "PIN must be at least 4 digits" });
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const salt = await bcrypt.genSalt(10);
+    user.pin = await bcrypt.hash(pin, salt);
+    await user.save();
+
+    res.json({ message: "PIN set successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };

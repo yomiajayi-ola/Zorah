@@ -20,4 +20,8 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
+userSchema.methods.matchPin = async function (enteredPin) {
+  return await bcrypt.compare(enteredPin, this.pin);
+}
+
 export default mongoose.model("User", userSchema);
