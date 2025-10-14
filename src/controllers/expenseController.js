@@ -62,3 +62,26 @@ export const getExpenseSummary = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 }
+
+
+// @desc Get daily expense breakdown
+export const getDailyExpenses = async (req, res) => {
+    try {
+        const daily = await Expense.aggregate([
+            { $match: { user: req.user._id } },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: { format: "%Y-%m-%d", date: "$date" },
+                    },
+                    total: { $sum: "$amount" },
+                }, 
+            }, 
+            { $sort: { _id: 1 } },
+        ]);
+
+        res.json(daily);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
