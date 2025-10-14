@@ -32,3 +32,33 @@ export const getExpense = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc Get Expense summary (total per category)
+export const getExpenseSummary = async (req, res) => {
+    try {
+        const summary = await Expense.aggregate([
+            { $match: { user: req.user._id } },
+            {
+              $group: {
+                _id: "$category",
+                total: { $sum: "$amount" },
+                count: { $sum: 1 },
+              },
+            },
+            { $sort: { total: -1 } },
+            {
+              $project: {
+                _id: 0,
+                category: "$_id",
+                total: 1,
+                count: 1,
+              },
+            },
+          ]);
+          
+
+        res.json(summary);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
