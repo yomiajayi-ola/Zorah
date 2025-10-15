@@ -72,12 +72,15 @@ export const getDailyExpenses = async (req, res) => {
             {
                 $group: {
                     _id: {
-                        $dateToString: { format: "%Y-%m-%d", date: "$date" },
+                        day: { $dayOfMonth: "$date" },
+                        month: { $month: "$date" },
+                        year: { $year: "$date" },
+                        // $dateToString: { format: "%Y-%m-%d", date: "$date" },
                     },
                     total: { $sum: "$amount" },
                 }, 
             }, 
-            { $sort: { _id: 1 } },
+            { $sort: { "_id.year": -1, "_id.month": -1, "_id.day": -1 } },
         ]);
 
         res.json(daily);
@@ -85,3 +88,24 @@ export const getDailyExpenses = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc Get monthly expense breakdown
+export const getMonthlyExpenses = async (req, res) => {
+    try {
+        const monthlySummary = await Expense.aggregate([
+            {
+                $group: {
+                    _id: {
+                        month: { $month: "$date" },
+                        year: { $year: "$date" },
+                    },
+                    total: { $sum: "$amount" },
+                },
+            },
+            { $sort: { "_id.year": -1, "_id.month": -1} },
+        ]);
+        res.json(monthlySummary);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
