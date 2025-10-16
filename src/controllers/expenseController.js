@@ -1,27 +1,95 @@
 import Expense from "../models/Expense.js";
+import Budget from "../models/Budget.js";
+import { createNotification } from "../services/notificationService.js";
+import mongoose from "mongoose";
 
-// @desc Add new expense 
+// @desc    Add new expense
+// @route   POST /api/expenses
+// @access  Private
+
 export const addExpense = async (req, res) => {
-    try {
-        const { amount, category, description, paymentMethod, date } = req.body;
+  try {
+    const { amount, category, description, paymentMethod, date } = req.body;
 
-        // Amount
-        if (!amount) return res.status(400).json({ message: "Amount is required" });
-
-        const expense = await Expense.create({
-            user: req.user.id,
-            amount,
-            category,
-            description,
-            paymentMethod,
-            date,
-        });
-
-        res.status(201).json(expense);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+    if (!amount) {
+      return res.status(400).json({ message: "Amount is required" });
     }
+
+    const expense = await Expense.create({
+      user: req.user._id,
+      amount,
+      category,
+      description,
+      paymentMethod,
+      date,
+    });
+
+    const expenseDate = new Date(date);
+    const expenseMonth = expenseDate.getMonth() + 1;
+    const expenseYear = expenseDate.getFullYear();
+
+    const budget = await Budget.findOne({
+      user: req.user._id,
+      category: expense.category,
+      $or: [
+        { month: expenseMonth, year: expenseYear },
+        { 
+          startDate: { $lte: expenseDate },
+          endDate: { $gte: expenseDate }
+        }
+      ]
+    });
+
+    if (!budget) {
+      return res.status(201).json(expense);
+    }
+
+    const totalSpent = await Expense.aggregate([
+      {
+        $match: {
+          user: req.user._id,
+          category: expense.category,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: "$date" }, expenseMonth] },
+              { $eq: [{ $year: "$date" }, expenseYear] },
+            ],
+          },
+        },
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: "$amount" } 
+        } 
+      },
+    ]);
+
+    const spent = totalSpent[0]?.total || 0;
+    const percent = (spent / budget.amount) * 100;
+
+    if (percent >= 80 && percent < 100) {
+      await createNotification({
+        userId: req.user._id,
+        type: "budget",
+        title: "Budget nearing limit",
+        message: `You've spent ${percent.toFixed(1)}% of your ${category} budget.`,
+      });
+    } else if (percent >= 100) {
+      await createNotification({
+        userId: req.user._id,
+        type: "budget",
+        title: "Budget exceeded", 
+        message: `You've exceeded your ${category} budget!`,
+      });
+    }
+
+    res.status(201).json(expense);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
+
 
 // @desc Get All expenses for user 
 export const getExpense = async (req, res) => {

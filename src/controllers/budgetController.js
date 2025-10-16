@@ -6,18 +6,27 @@ export const setBudget = async (req, res) => {
     try {
         const { category, amount, period, startDate, endDate } = req.body;
 
+        // ADD THIS: Calculate month and year from startDate
+        const start = new Date(startDate);
+        const month = start.getMonth() + 1;
+        const year = start.getFullYear();
+
         let budget = await Budget.findOne({
             user: req.user._id,
             category,
-            period
+            period,
+            month,  // Add month to the query
+            year    // Add year to the query
         });
 
         if (budget) {
             budget.amount = amount;
             budget.startDate = startDate;
             budget.endDate = endDate;
+            budget.month = month;    // Update month
+            budget.year = year;      // Update year
             await budget.save();
-            return res.json ({ message: "Budget updated succesfully", budget });
+            return res.json({ message: "Budget updated successfully", budget });
         }
 
         budget = await Budget.create({
@@ -27,9 +36,11 @@ export const setBudget = async (req, res) => {
             period,
             startDate,
             endDate,
+            month,    // ADD THIS
+            year      // ADD THIS
         });
 
-        res.status(201).json({ message: "Budget created succesfully", budget });
+        res.status(201).json({ message: "Budget created successfully", budget });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
