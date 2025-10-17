@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { access } from "fs";
+import { sendEmail } from "../utils/sendEmail.js";
 
 
 const generateToken = (id) => {
@@ -158,11 +159,31 @@ export const requestPasswordReset = async (req, res) => {
     user.resetPasswordExpires = resetExpires;
     await user.save();
 
+    // Html Reset password link 
+    const resetUrl = `http://localhost:4000/reset-password/${resetToken}`;
+
+    const message = `
+    <h2>Password Reset Request</h2>
+    <p>Hi ${user.name || "there"},</p>
+    <p>You requested a password reset for your Zorah account.</p>
+    <p>Click below to reset your password. This link expires in 10 minutes.</p>
+    <a href="${resetUrl}"
+    style="display:inline-block;padding:10px 15px;background:#4F46E5;color:white;text-decoration:none;border-radius:6px;">
+    Reset Password
+    </a>
+    <p>If you didn't request this, just ignore this email.</p>`;
+
+    await sendEmail({
+      email: user.email,
+      subject: "Zorah Password Reset",
+      message,
+    });
+
     // Instead of emanil for now;
-    console.log(`Reset Token (temporary): ${resetToken}`);
+    // console.log(`Reset Token (temporary): ${resetToken}`);
 
-    res.json({ message: "Password reset token generated (check console)" });
-
+    // res.json({ message: "Password reset token generated (check console)" });
+    res.json({ message: "Password reset email sent successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
