@@ -1,11 +1,16 @@
 import express from "express";
 import dotenv from "dotenv";
+// import { API_URL, DB_KEY } from '@env';
 import cors from "cors";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
 import expenseRoutes from "./routes/expense.routes.js";
 import budgetRoutes from "./routes/budget.routes.js"
 import notificationRoutes from "./routes/notification.routes.js"
+// import Config from "react-native-config";
+
+// Access variables like this:
+// const api = Config.API_URL;
 
 
 

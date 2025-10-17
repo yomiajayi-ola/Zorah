@@ -1,6 +1,7 @@
 
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import fetch from "node-fetch";
 
 // @desc Get all user notifications
 export const getNotifications = async (req, res) => {
@@ -44,3 +45,36 @@ export const getNotifications = async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   }
+
+
+  // @desc send push notification 
+  export const sendTestNotification = async (req, res) => {
+    try {
+      const { expoPushToken, title, body } = req.body;
+
+      if(!expoPushToken) 
+        return res.status(400).json({ message: "Expo Push Token required"});
+
+      const message = {
+        to: expoPushToken,
+        sound: "default",
+        title: title || "Test Notification",
+        body: body || "This is a test from Zorah backend🚀",
+      };
+
+      const response = await fetch ("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(message),
+      });
+
+      const data = await response.json();
+      res.json({ message: "Notification sent succesfully", data });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
