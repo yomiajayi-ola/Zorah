@@ -17,3 +17,22 @@ export const createGoal = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc Add contribution
+export const addContribution = async (req, res) => {
+    try {
+        const { goalId, amount } = req.body;
+        const goal = await SavingsGoal.findOne({ _id: goalId, user: req.user._id });
+        if (!goal) return res.status(404).json({ message: "Goal not found "});
+
+        goal.currentAmount += amount;
+        await goal.save();
+
+        res.json({
+            message: "Contribution added",
+            progress: `${((goal.currentAmount / goal.targetAmount) * 100).toFixed(2)}%`,
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
