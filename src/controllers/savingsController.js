@@ -36,3 +36,13 @@ export const addContribution = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc Get all user goals
+export const getGoals = async (req, res) => {
+    try {
+        const goals = await SavingsGoal.find({ user: req.user._id });
+        res.json(goals);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
