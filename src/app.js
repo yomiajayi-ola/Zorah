@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import expenseRoutes from "./routes/expense.routes.js";
 import budgetRoutes from "./routes/budget.routes.js"
 import notificationRoutes from "./routes/notification.routes.js"
+import savingsRoutes from "./routes/savings.routes.js";
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -31,7 +32,8 @@ app.use(cors());
 app.use("/api/auth", authRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/budgets", budgetRoutes);
-app.use("/api/notifications", notificationRoutes)
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/savings", savingsRoutes);
 
 
 

@@ -9,7 +9,7 @@ const savingsGoalSchema = new mongoose.Schema({
     currentAmount: { type: Number, default: 0 },
     deadline: { type: Date, required: true },
     description: { type: String },
-    ceatedAt: { type, Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now },
 });
 
 export default mongoose.model("SavingsGoal", savingsGoalSchema);
