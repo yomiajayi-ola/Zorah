@@ -1,4 +1,4 @@
-import { watchFile } from "fs";
+// import { watchFile } from "fs";
 import EsusuGroup from "../models/EsusuGroup.js";
 
 // @desc Create Esusu group
@@ -45,17 +45,16 @@ export const joinGroup = async (req, res) => {
 
 // @desc Get group details
 export const getGroup = async (req, res) => {
-    try {
-      const group = await EsusuGroup.findById(req.params.id)
-        .populate("members.user", "name email");
-  
-      if (!group) {
-        return res.status(404).json({ message: "Group not found" });
-      }
-  
-      res.status(200).json(group);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
+  try {
+    const group = await EsusuGroup.findById(req.params.id)
+      .populate("members.user", "name email");
+
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
     }
-  };
-  
+
+    res.status(200).json(group);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

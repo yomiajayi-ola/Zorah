@@ -30,3 +30,5 @@ app.post("/send-notification", async (req, res) => {
 
 const PORT = 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+import "./cron/payoutCron.js"
