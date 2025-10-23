@@ -32,6 +32,11 @@ export const addContribution = async (req, res) => {
             message: "Contribution added",
             progress: `${((goal.currentAmount / goal.targetAmount) * 100).toFixed(2)}%`,
         });
+
+        // 💳 Deduct from wallet & log transaction
+        await debitWallet(req.user.id, amount, 'amount', goal._id);
+
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
