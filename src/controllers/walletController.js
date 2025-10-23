@@ -52,3 +52,49 @@ export const depositFunds = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message})
     }
 };
+
+// Withdraw funds 
+export const withdrawFunds = async (req, res) => {
+//   console.log("Request body received:", req.body);
+
+  const { amount } = req.body;
+
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ success: false, message: "Invalid amount" });
+  }
+
+  try {
+    const wallet = await Wallet.findOne({ user: req.user.id });
+    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
+
+    if (wallet.balance < amount) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Insufficient balance" });
+    }
+
+    const reference = uuidv4();
+
+    const transaction = await Transaction.create({
+      user: req.user.id,
+      type: "debit",
+      amount,
+      purpose: "withdrawal",
+      reference,
+      status: "successful",
+    });
+
+    wallet.balance -= amount;
+    wallet.lastTransaction = new Date();
+    await wallet.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Withdrawal successful",
+      wallet,
+      transaction,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
