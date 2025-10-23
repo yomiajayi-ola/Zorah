@@ -17,7 +17,7 @@ const transactionSchema = new mongoose.Schema({
   },
   purpose: {
     type: String,
-    enum: ["deposit", "withdrawal", "savings", "esusu", "transfer", "esusu_contribution", "other"],
+    enum: ["deposit", "withdrawal", "savings", "esusu", "transfer", "esusu_contribution", "savings_contribution", "other"],
     default: "other"
   },
   reference: {
