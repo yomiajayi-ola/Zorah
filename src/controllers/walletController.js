@@ -116,3 +116,15 @@ export const getWalletBalance = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
+
+
+// Get transaction history
+export const getTransactions = async (req, res) => {
+    try {
+        const transactions = await Transaction.find({ user: req.user.id }).sort({ createdAt: -1 });
+
+        return res.status(200).json({ success: true, transactions });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+}
