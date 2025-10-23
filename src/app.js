@@ -10,6 +10,7 @@ import notificationRoutes from "./routes/notification.routes.js"
 import savingsRoutes from "./routes/savings.routes.js";
 import esusuRoutes from "./routes/esusu.routes.js"
 import esusuPayoutRoutes from "./routes/esusuPayoutRoutes.js";
+import walletRoutes from "./routes/walletRoutes.js";
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -38,6 +39,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/savings", savingsRoutes);
 app.use("/api/esusu", esusuRoutes);
 app.use("/api/esusu/payouts", esusuPayoutRoutes);
+app.use("/api/wallet", walletRoutes);
 
 
 

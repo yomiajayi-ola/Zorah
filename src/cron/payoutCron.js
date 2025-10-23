@@ -3,7 +3,7 @@ import { retryFailedPayouts } from "../controllers/esusuRetryController.js";
 import { processEsusuPayouts } from "../controllers/esusuPayoutController.js";
 
 // Runs every Monday at 8 AM (you can adjust for weekly payouts)
-cron.schedule("0 8 * * MON", async () => {
+cron.schedule("* * * * *", async () => {
   console.log("🔁 Running scheduled Esusu payouts...");
 
   try {
