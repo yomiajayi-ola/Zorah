@@ -98,3 +98,21 @@ export const withdrawFunds = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// Get Balance 
+export const getWalletBalance = async (req, res) => {
+    try {
+        const wallet = await Wallet.findOne({ user: req.user.id });
+        if (!wallet) 
+            return res.status(404).json({ success: false, message: "Wallet not found" });
+
+        return res.status(200).json({
+            success: true,
+            balance: wallet.balance,
+            currency: wallet.currency,
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
