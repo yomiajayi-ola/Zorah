@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema({
   biometricEnabled: { type: Boolean, default: false },
   resetPasswordToken: String,
   resetPasswordExpires: Date,
+  KycStatus: {
+    type: String,
+    enum: ["unverified", "pending", "verified", "rejected"],
+    default: "unverified",
+  }
 }, { timestamps: true });
 
 userSchema.pre("save", async function(next) {

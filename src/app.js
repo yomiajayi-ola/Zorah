@@ -55,6 +55,10 @@ app.get("/", (req, res) => {
     res.send("Zorah API is running");
   });
   
+  // app.get('/api/v1/health', (req, res) => {
+  //   res.json({ status: 'Zorah backend is live 🚀' });
+  // });
+  
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
