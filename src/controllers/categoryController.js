@@ -38,6 +38,8 @@ export const seedCategories = async (req, res) => {
       { name: 'Shopping', image: '🛍️', type: 'expense' },
       { name: 'Transport', image: '🚌', type: 'expense' },
       { name: 'Travel', image: '✈️', type: 'expense' },
+      { name: 'Rent', image: '🏠', type: 'budget' },
+      { name: 'Savings Goal', image: '🎯', type: 'savings' },
     ];
 
     await Category.deleteMany({});

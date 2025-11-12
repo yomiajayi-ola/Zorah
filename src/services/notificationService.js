@@ -10,31 +10,28 @@ import { sendPushNotification } from "./pushService.js";
  * @param {string} options.title
  * @param {string} options.message
  */
+
 export const createNotification = async ({ userId, type, title, message }) => {
-    // console.log("⚙️ createNotification() called", { userId, type, title });
-  
-  // try {
+  try {
     const user = await User.findById(userId);
-    const notification = new Notification.create({
+    if (!user) throw new Error("User not found");
+
+    const notification = await Notification.create({
       user: userId,
       type,
       title,
       message,
     });
-    await notification.save();
 
     if (user.expoPushToken) {
-      await sendPushNotification(user.expoPushToken, title, message)
+      await sendPushNotification(user.expoPushToken, title, message);
     }
 
-    console.log(`📢 Notification for ${type}: ${title}`);
-    
-    // FIX: Remove or properly await the setTimeout if you really need it
-    // await new Promise(res => setTimeout(res, 10));
-    
     return notification;
-  // } catch (error) {
-  //   console.error("Failed to create notification:", error);
-  //   throw error; // FIX: Re-throw the error so it bubbles up
+  } catch (error) {
+    console.error("❌ Failed to create notification:", error.message);
+    throw error;
   }
+};
+
 
