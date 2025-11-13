@@ -1,6 +1,6 @@
 // import { required } from "joi";
 import mongoose from "mongoose";
-import { CreatedAt } from "sequelize-typescript";
+// import { CreatedAt } from "sequelize-typescript";
 
 const savingsGoalSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
