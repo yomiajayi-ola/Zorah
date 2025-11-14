@@ -1,8 +1,11 @@
-import { required } from "joi";
+// import { required } from "joi";
 import mongoose from "mongoose";
 
 const KycSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    walletId: { type: String },
+    walletStatus: { type: String, default: "pending" },
+
 
     // Tier info
     tier: {

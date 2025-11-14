@@ -1,16 +1,16 @@
 import multer from "multer";
-import { cloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import cloudinary from "../config/cloudinary.js";
 
-const storage = new cloudinaryStorage({
-    cloudinary,
-    params: async (req, file) => {
-        return {
-            folder: "zorah/kyc",
-            allowed_formats: ["jpg", "png", "jpeg", "pdf"],
-            pubic_id: `${file.fieldname}-${Date.now}`,
-        };
-    },
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    return {
+      folder: "zorah/kyc",
+      allowed_formats: ["jpg", "png", "jpeg", "pdf"],
+      public_id: `${file.fieldname}-${Date.now()}`, // Fixed typo: pubic_id → public_id
+    };
+  },
 });
 
 export const upload = multer({ storage });

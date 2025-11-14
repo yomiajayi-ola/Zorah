@@ -13,6 +13,7 @@ import esusuPayoutRoutes from "./routes/esusuPayoutRoutes.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import incomeRoutes from "./routes/income.routes.js";
 import categoryRoutes from './routes/category.routes.js';
+import kycRoutes from "./routes/kycRoutes.js";
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -44,6 +45,7 @@ app.use("/api/esusu/payouts", esusuPayoutRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/income", incomeRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use("/api/kyc", kycRoutes);
 
 
 
