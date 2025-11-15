@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import path from 'path';
 // import { API_URL, DB_KEY } from '@env';
 import cors from "cors";
 import connectDB from "./config/db.js";
@@ -49,8 +50,7 @@ app.use("/api/kyc", kycRoutes);
 
 
 
-
-
+app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
 
 
 
