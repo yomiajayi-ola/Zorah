@@ -1,19 +1,19 @@
 import mongoose from 'mongoose';
 
-const subcategorySchema = new mongoose.Schema({
+const subCategorySchema = new mongoose.Schema({
   name: { type: String, required: true },
-  image: { type: String, required: false }, // optional for subcategories
-});
+  image: { type: String, required: true }
+}, { _id: true }); // Each subcategory gets its own _id
 
 const categorySchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  image: { type: String, required: true }, // this should now be a real URL
+  name: { type: String, required: true },       // e.g., "Budget"
   type: {
     type: String,
     enum: ['budget', 'expense', 'income', 'savings'],
-    required: true,
+    required: true
   },
-  subcategories: [subcategorySchema], // new field
+  image: { type: String, default: '' },         // optional main image for parent
+  subcategories: [subCategorySchema]           // array of subcategories
 }, { timestamps: true });
 
 export default mongoose.model('Category', categorySchema);

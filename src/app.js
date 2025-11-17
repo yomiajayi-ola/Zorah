@@ -50,7 +50,8 @@ app.use("/api/kyc", kycRoutes);
 
 
 
-app.use('/images', express.static(path.join(process.cwd(), 'public/images')));
+app.use('/images', express.static('public/images'));
+
 
 
 

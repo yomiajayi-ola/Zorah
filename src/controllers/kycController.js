@@ -34,17 +34,18 @@ export const submitKyc = async (req, res) => {
 
         // Create record 
         const kyc = await KYC.create({
-            userId,
-            tier,
-            name,
-            dateOfBirth,
-            phoneNumber,
-            address,
-            bvn,
-            nin,
-            passportPhoto,
-            utilityBill,
-        });
+          user: userId,
+          tier,
+          name,
+          dateOfBirth,
+          phoneNumber,
+          address,
+          bvn,
+          nin,
+          passportPhoto,
+          utilityBill,
+      });
+      
 
          // Create wallet on Xpress Wallet
     const walletPayload = {

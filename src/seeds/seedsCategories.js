@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Category from '../models/Category.js';
@@ -12,32 +10,52 @@ mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('DB Connected'))
   .catch(err => console.error(err));
 
-const basePath = path.join(process.cwd(), 'public/images/categories');
-
-const categoryTypes = ['budget', 'expense', 'income', 'savings'];
+const categories = [
+  {
+    name: 'Income',
+    type: 'income',
+    subcategories: [
+      { name: 'Allowance', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/allowance.png' },
+      { name: 'Bonus', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/bonus.png' },
+      { name: 'Investment', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/investment.png' },
+      { name: 'Salary', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/salary.png' }
+    ]
+  },
+  {
+    name: 'Budget',
+    type: 'budget',
+    subcategories: [
+      { name: 'Entertainment', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/budget/entertainment.png' },
+      { name: 'Food', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/budget/food.png' },
+      { name: 'Shopping', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/budget/shopping.png' },
+      { name: 'Transport', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/budget/transport.png' }
+    ]
+  },
+  {
+    name: 'Expense',
+    type: 'expense',
+    subcategories: [
+      { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/call.png' },
+      { name: 'Food', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/food.png' },
+      { name: 'POS Charges', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/pos-charges.png' },
+      { name: 'Transport', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' }
+    ]
+  },
+  {
+    name: 'Savings',
+    type: 'savings',
+    subcategories: [
+      { name: 'Car', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/car.png' },
+      { name: 'Education', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/education.png' },
+      { name: 'Home', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/home.png' },
+      { name: 'Travel', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/travel.png' }
+    ]
+  }
+];
 
 const seedCategories = async () => {
   try {
     await Category.deleteMany({});
-
-    const categories = categoryTypes.map(type => {
-      const subDir = path.join(basePath, type);
-      const files = fs.readdirSync(subDir);
-
-      const subcategories = files.map(file => {
-        const name = path.parse(file).name; // filename without extension
-        const image = `http://13.48.253.14:4000/images/categories/${type}/${file}`;
-        return { name, image };
-      });
-
-      return {
-        name: type.charAt(0).toUpperCase() + type.slice(1), // main category name
-        type,
-        image: '', // optional main image
-        subcategories
-      };
-    });
-
     await Category.insertMany(categories);
     console.log('Categories seeded successfully');
     process.exit(0);
