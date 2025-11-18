@@ -49,7 +49,7 @@ app.use('/api/categories', categoryRoutes);
 app.use("/api/kyc", kycRoutes);
 
 
-
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
 app.use('/images', express.static('public/images'));
 
 
