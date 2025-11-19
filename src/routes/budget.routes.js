@@ -1,10 +1,37 @@
 import express from "express";
 import { protect } from "../middlewares/auth.middleware.js";
-import { getBudgets, setBudget } from "../controllers/budgetController.js";
+
+import {
+  setBudget,
+  getBudgets,
+  getBudgetById,
+  updateBudget,
+  archiveBudget,
+  restoreBudget,
+  deleteBudgetPermanently
+} from "../controllers/budgetController.js";
 
 const router = express.Router();
 
-router.post("/set-budget", protect, setBudget);
+// Create a new budget
+router.post("/", protect, setBudget);
+
+// Get all active budgets
 router.get("/get-budgets", protect, getBudgets)
+
+// Get single budget
+router.get("/:id", protect, getBudgetById);
+
+// Update/Edit budget
+router.patch("/:id", protect, updateBudget);
+
+// Archive budget (soft delete)
+router.patch("/:id/archive", protect, archiveBudget);
+
+// Restore archived budget
+router.patch("/:id/restore", protect, restoreBudget);
+
+// Permanently delete budget
+router.delete("/:id", protect, deleteBudgetPermanently);
 
 export default router;
