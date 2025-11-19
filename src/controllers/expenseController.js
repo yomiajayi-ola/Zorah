@@ -177,3 +177,104 @@ export const getMonthlyExpenses = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 }
+
+export const getExpenseById = async (req, res) => {
+  try {
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!expense) {
+      return res.status(404).json({ message: "Expense not found" });
+    }
+
+    res.json(expense);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!expense) return res.status(404).json({ message: "Expense not found" });
+
+    const { amount, category, description, paymentMethod, date } = req.body;
+
+    if (amount !== undefined) expense.amount = amount;
+    if (category) expense.category = category;
+    if (description) expense.description = description;
+    if (paymentMethod) expense.paymentMethod = paymentMethod;
+    if (date) expense.date = date;
+
+    await expense.save();
+
+    res.json({ message: "Expense updated successfully", expense });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const archiveExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!expense) return res.status(404).json({ message: "Expense not found" });
+
+    expense.status = "archived";
+    expense.archivedAt = new Date();
+    await expense.save();
+
+    res.json({ message: "Expense archived successfully", expense });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const restoreExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!expense) return res.status(404).json({ message: "Expense not found" });
+
+    expense.status = "active";
+    expense.archivedAt = null;
+
+    await expense.save();
+
+    res.json({ message: "Expense restored successfully", expense });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const deleteExpensePermanently = async (req, res) => {
+  try {
+    const deleted = await Expense.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!deleted)
+      return res.status(404).json({ message: "Expense not found" });
+
+    res.json({ message: "Expense deleted permanently" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+

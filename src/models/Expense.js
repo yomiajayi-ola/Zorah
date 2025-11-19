@@ -8,7 +8,7 @@ const expenseSchema = new mongoose.Schema(
       required: true,
     },
     amount: {
-      type: Number, 
+      type: Number,
       required: true,
     },
     category: {
@@ -16,21 +16,24 @@ const expenseSchema = new mongoose.Schema(
       enum: ["Food", "Transport", "Housing", "Health", "Entertainment", "Others"],
       default: "Others",
     },
-    description: {
-      type: String,
-      trim: true,
-    },
+    description: { type: String, trim: true },
     paymentMethod: {
       type: String,
-      enum: ["Cash", "Card", "Transfer", "Wallet"], 
+      enum: ["Cash", "Card", "Transfer", "Wallet"],
       default: "Cash",
     },
-    date: {
-      type: Date,
-      default: Date.now,
+    date: { type: Date, default: Date.now },
+
+    // NEW
+    status: {
+      type: String,
+      enum: ["active", "archived"],
+      default: "active",
     },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
+
 
 export default mongoose.model("Expense", expenseSchema);
