@@ -61,3 +61,100 @@ export const getGoals = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 }
+
+export const getGoalById = async (req, res) => {
+  try {
+    const goal = await SavingsGoal.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+    res.json(goal);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateGoal = async (req, res) => {
+  try {
+    const goal = await SavingsGoal.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+    const { title, targetAmount, deadline, description } = req.body;
+
+    if (title) goal.title = title;
+    if (targetAmount) goal.targetAmount = targetAmount;
+    if (deadline) goal.deadline = deadline;
+    if (description) goal.description = description;
+
+    await goal.save();
+
+    res.json({ message: "Goal updated successfully", goal });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const archiveGoal = async (req, res) => {
+  try {
+    const goal = await SavingsGoal.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+    goal.status = "archived";
+    goal.archivedAt = new Date();
+
+    await goal.save();
+
+    res.json({ message: "Goal archived successfully", goal });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const restoreGoal = async (req, res) => {
+  try {
+    const goal = await SavingsGoal.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
+
+    goal.status = "active";
+    goal.archivedAt = null;
+
+    await goal.save();
+
+    res.json({ message: "Goal restored successfully", goal });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+export const deleteGoalPermanently = async (req, res) => {
+  try {
+    const goal = await SavingsGoal.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!goal)
+      return res.status(404).json({ message: "Goal not found" });
+
+    res.json({ message: "Goal deleted permanently" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

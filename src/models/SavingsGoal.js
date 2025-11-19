@@ -9,6 +9,11 @@ const savingsGoalSchema = new mongoose.Schema({
     currentAmount: { type: Number, default: 0 },
     deadline: { type: Date, required: true },
     description: { type: String },
+    status: {
+        type: String,
+        enum: ["active", "archived"],
+        default: "active"
+      },
     createdAt: { type: Date, default: Date.now },
 });
 
