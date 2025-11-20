@@ -150,74 +150,68 @@ export const requestPasswordReset = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user ) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    const resetExpires = Date.now() + 10 * 60 * 10000; // 10mins
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
 
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = resetExpires;
+    user.otp = otp;
+    user.otpExpires = otpExpires;
     await user.save();
 
-    // Html Reset password link 
-    const resetUrl = `http://localhost:4000/reset-password/${resetToken}`;
-
+    // Send OTP via email
     const message = `
-    <h2>Password Reset Request</h2>
-    <p>Hi ${user.name || "there"},</p>
-    <p>You requested a password reset for your Zorah account.</p>
-    <p>Click below to reset your password. This link expires in 10 minutes.</p>
-    <a href="${resetUrl}"
-    style="display:inline-block;padding:10px 15px;background:#4F46E5;color:white;text-decoration:none;border-radius:6px;">
-    Reset Password
-    </a>
-    <p>If you didn't request this, just ignore this email.</p>`;
+      <h2>Password Reset OTP</h2>
+      <p>Hi ${user.name || "there"},</p>
+      <p>Your OTP to reset your password is: <strong>${otp}</strong></p>
+      <p>This OTP expires in 10 minutes.</p>
+    `;
 
     await sendEmail({
       email: user.email,
-      subject: "Zorah Password Reset",
+      subject: "Zorah Password Reset OTP",
       message,
     });
 
-    // Instead of emanil for now;
-    // console.log(`Reset Token (temporary): ${resetToken}`);
-
-    // res.json({ message: "Password reset token generated (check console)" });
-    res.json({ message: "Password reset email sent successfully" });
+    res.json({ message: "OTP sent successfully to your email" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}
+};
+
 
 // Reset password using token
 export const resetPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { email, otp, newPassword } = req.body;
 
-    // Find user by valid reset token expiry
-    const user = await User.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() },
-    });
+    const user = await User.findOne({ email });
 
-    if (!user)
-    return res.status(400).json({ message: "Invalid or expired reset token" });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user.otp || !user.otpExpires || user.otpExpires < Date.now()) {
+      return res.status(400).json({ message: "OTP expired or invalid" });
+    }
+    if (user.otp !== otp) {
+      return res.status(400).json({ message: "Incorrect OTP" });
+    }
 
-    // Hash new password manually 
-    // const  salt = await bcrypt.genSalt(10);
-    user.password = newPassword;
+    // Update password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
 
-    // clear reset fields 
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+    // Clear OTP
+    user.otp = undefined;
+    user.otpExpires = undefined;
 
     await user.save();
 
-    res.json({ message: "Password reset succesful, please login" });
+    res.json({ message: "Password reset successful, please login" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-}
+};
+
 
 // Refresh access token 
 export const refreshAccessToken = async (req, res) => {

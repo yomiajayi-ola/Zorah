@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   pin: { type: String },
   biometricEnabled: { type: Boolean, default: false },
+  otp: { type: String },
+  otpExpires: { type: Date },
   resetPasswordToken: String,
   resetPasswordExpires: Date,
   KycStatus: {
