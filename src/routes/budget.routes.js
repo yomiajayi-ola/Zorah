@@ -4,11 +4,12 @@ import { protect } from "../middlewares/auth.middleware.js";
 import {
   setBudget,
   getBudgets,
+  // getBudgetMonths,
   getBudgetById,
   updateBudget,
   archiveBudget,
   restoreBudget,
-  deleteBudgetPermanently
+  deleteBudgetPermanently,
 } from "../controllers/budgetController.js";
 
 const router = express.Router();
@@ -18,6 +19,9 @@ router.post("/", protect, setBudget);
 
 // Get all active budgets
 router.get("/get-budgets", protect, getBudgets)
+
+// Get all active budgets with monhts
+// router.get("/get-budgets-months", protect, getBudgetMonths)
 
 // Get single budget
 router.get("/:id", protect, getBudgetById);

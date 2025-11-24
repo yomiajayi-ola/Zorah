@@ -3,93 +3,150 @@ import Expense from "../models/Expense.js";
 
 // @desc create or update a budget 
 export const setBudget = async (req, res) => {
-    try {
-        const { category, amount, period, startDate, endDate } = req.body;
+  try {
+    const { category, amount, period, startDate, endDate } = req.body;
 
-        // ADD THIS: Calculate month and year from startDate
-        const start = new Date(startDate);
-        const month = start.getMonth() + 1;
-        const year = start.getFullYear();
+    const start = new Date(startDate);
+    const month = start.getMonth() + 1; // 1-12
+    const year = start.getFullYear();
 
-        let budget = await Budget.findOne({
-            user: req.user._id,
-            category,
-            period,
-            month,  // Add month to the query
-            year    // Add year to the query
-        });
+    let budget = await Budget.findOne({
+      user: req.user._id,
+      category,
+      month,
+      year
+    });
 
-        if (budget) {
-            budget.amount = amount;
-            budget.startDate = startDate;
-            budget.endDate = endDate;
-            budget.month = month;    // Update month
-            budget.year = year;      // Update year
-            await budget.save();
-            return res.json({ message: "Budget updated successfully", budget });
-        }
+    if (budget) {
+      budget.amount = amount;
+      budget.period = period || budget.period;
+      budget.startDate = startDate || budget.startDate;
+      budget.endDate = endDate || budget.endDate;
 
-        budget = await Budget.create({
-            user: req.user._id,
-            category,
-            amount,
-            period,
-            startDate,
-            endDate,
-            month,    // ADD THIS
-            year      // ADD THIS
-        });
-
-        res.status(201).json({ message: "Budget created successfully", budget });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+      await budget.save();
+      return res.json({ message: "Budget updated successfully", budget });
     }
+
+    budget = await Budget.create({
+      user: req.user._id,
+      category,
+      amount,
+      period,
+      startDate,
+      endDate,
+      month,   // ✅ make sure month/year are saved
+      year
+    });
+
+    res.status(201).json({ message: "Budget created successfully", budget });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
+
 
 // @desc Fetch current budgets & show balance left 
 export const getBudgets = async (req, res) => {
-    try {
-        const budgets = await Budget.find({ user: req.user._id });
 
-        const data = await Promise.all(
-            budgets.map(async (budget) => {
-                const spent = await Expense.aggregate([
-                    {
-                        $match: {
-                            user: req.user._id,
-                            category: budget.category,
-                            date: { $gte: budget.startDate, $lte: budget.endDate },
-                        },
-                    },
-                    { $group: { _id: null, total: { $sum: "$amount" } } },
-                ]);
+  try {
 
-                const totalSpent = spent[0]?.total || 0;
-                const remaining = budget.amount - totalSpent;
-                const percentageused = ((totalSpent / budget.amount) * 100).toFixed(2);
+    // --- Prepare Query ---
+    console.log("RAW QUERY:", req.query);
+    
+    // 💡 NEW: Check if the 'monthsOnly' property exists in the query object at all.
+    // This is more resilient than checking for a specific string/boolean value.
+    const isMonthsOnlyRequest = !!req.query.monthsOnly;
+    
+    // Destructure filtering parameters early
+    const { month, year, period } = req.query; 
 
-                return {
-                    _id: budget._id,               // 🚀 ADD ID HERE
-                    category: budget.category,
-                    Limit: budget.amount,
-                    totalSpent,
-                    remaining,
-                    percentageused: `${percentageused}%`,
-                    status: 
-                        remaining <= 0
-                        ? "over budget 🚨"
-                        : remaining < budget.amount * 0.1
-                        ? "Almost reached ⛔️"
-                        : "On track ✅",
-                };
-            })
-        );
+    const query = { user: req.user._id };
+    
+    // ====== 1️⃣ RETURN ONLY MONTHS AVAILABLE ======
+    if (isMonthsOnlyRequest) {
+      console.log("EXECUTING: UNIQUE MONTHS LOGIC");
+      
+      // We don't apply month/year/period filters here, as we want ALL periods.
+      const budgets = await Budget.find(query)
+        .select("month year -_id")
+        .sort({ year: 1, month: 1 });
 
-        res.json(data);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
+      // Create unique list of month/year combinations
+      const uniqueMonths = Array.from(
+        new Map(
+          budgets.map(b => [`${b.year}-${b.month}`, b])
+        ).values()
+      ).map(b => ({ month: b.month, year: b.year })); // Clean the output structure
+
+      // 🛑 Return the unique months and STOP
+      return res.status(200).json({ months: uniqueMonths });
     }
+
+    // --- Build Filtering Query (If not monthsOnly) ---
+    // --- Build Filtering Query (If not monthsOnly) ---
+    console.log("EXECUTING: BUDGET BREAKDOWN LOGIC");
+    
+    // If month, year, or period are provided, add them to the query object
+    if (month) query.month = Number(month);
+    if (year) query.year = Number(year);
+    // Normalize and add the period filter
+    if (period) query.period = period.toString().trim().toLowerCase(); 
+
+    // ====== FETCH FILTERED BUDGETS (OR ALL) ======
+    const budgets = await Budget.find(query);
+
+    // ====== 3️⃣ BREAKDOWN CALCULATION & FULL PAYLOAD MERGE ======
+    const data = await Promise.all(
+      budgets.map(async (budget) => {
+        
+        // Convert the Mongoose document to a plain JavaScript object
+        const budgetObject = budget.toObject(); 
+
+        const spent = await Expense.aggregate([
+          {
+            $match: {
+              user: req.user._id,
+              category: budget.category,
+              date: { $gte: budget.startDate, $lte: budget.endDate }, 
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$amount" } } },
+        ]);
+
+        const totalSpent = spent[0]?.total || 0;
+        const remaining = budget.amount - totalSpent;
+        const percentageused = ((totalSpent / budget.amount) * 100).toFixed(2);
+        
+        // 💡 CRITICAL CHANGE: Merge original budget fields and calculated fields
+        return {
+          ...budgetObject, // Include ALL original fields (month, year, startDate, etc.)
+          Limit: budget.amount, // Rename 'amount' to 'Limit' for consistency
+          totalSpent,
+          remaining,
+          percentageused: `${percentageused}%`,
+          status:
+            remaining <= 0
+              ? "over budget 🚨"
+              : remaining < budget.amount * 0.1
+              ? "Almost reached ⛔️"
+              : "On track ✅",
+        };
+      })
+    );
+    
+    // 🛑 Return the budget breakdown data along with the active month/year filter
+    return res.json({
+        data,
+        month: month ? Number(month) : null,
+        year: year ? Number(year) : null
+    });
+
+  } catch (error) {
+    console.error("Error in getBudgets:", error);
+    res.status(500).json({ message: error.message });
+  }
 };
+
 
 
 export const getBudgetById = async (req, res) => {

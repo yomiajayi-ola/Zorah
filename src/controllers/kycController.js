@@ -59,8 +59,8 @@ export const submitKyc = async (req, res) => {
       passportPhoto,
       utilityBill,
     });
-
-    // Create wallet on Xpress Wallet
+    
+    // Prepare wallet payload
     const walletPayload = {
       name: fullName,
       phone: phoneNumber,
@@ -70,26 +70,27 @@ export const submitKyc = async (req, res) => {
       dob: dateOfBirth,
       tier: Number(tier),
     };
-
-    const config = {
-      headers: {
-        Authorization: `Bearer ${process.env.XPRESS_WALLET_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    };
-
+    
+    // Correct Xpress Wallet endpoint
     const walletResponse = await axios.post(
-      "https://payment.xpress-wallet.com",
+      "https://api.xpresswallet.io/api/v1/wallets",
       walletPayload,
-      config
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.XPRESS_WALLET_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
-
-    const { walletId, status } = walletResponse.data;
-
-    // Save wallet info locally
+    
+    // Extract wallet data
+    const walletId = walletResponse.data?.data?.walletId;
+    const status = walletResponse.data?.data?.status;
+    
+    // Save wallet info
     await User.findByIdAndUpdate(userId, { walletId });
     await KYC.findByIdAndUpdate(kyc._id, { walletId, walletStatus: status });
-
+    
     return res.status(201).json({
       message: `KYC submitted successfully for Tier ${tier}. Wallet created.`,
       data: { kyc, walletId, status },
