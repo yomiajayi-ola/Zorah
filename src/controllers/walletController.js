@@ -1,121 +1,122 @@
 import Wallet from "../models/Wallet.js";
 import Transaction from "../models/Transaction.js";
 import { v4 as uuidv4 } from "uuid";
+import axios from "axios";
+import mongoose from "mongoose";
 
-// Create or get wallet for authenticated user 
-export const getOrCreateWallet = async (req, res) => {
-    try {
-        let wallet = await Wallet.findOne({ user: req.user.id });
 
-        if (!wallet) {
-            wallet = await Wallet.create({ user: req.user.id });
-        }
+const getUserWallet = async (userId) => {
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) throw new Error("Wallet not found for this user.");
+    return wallet;
+  };
+  
 
-        return res.status(200).json({ success: true, wallet });
-    } catch (error) {
-        return res.status(500).json({ success: false, message: error.message })
-    }
-};
-
-// Deposit funds 
 export const depositFunds = async (req, res) => {
-    const { amount } = req.body;
-    if(!amount || amount <= 0)
-        return res.status(400).json({ success: false, messsage: "Invalid amount" });
-
     try {
-        const wallet = await Wallet.findOne({ user: req.user.id });
-        if (!wallet) return res.status(404).json({ message: "Wallet not found" });
-
-        const reference = uuidv4();
-
-        const transaction = await Transaction.create({
-            user: req.user.id,
-            type: "credit",
-            amount,
-            purpose: "deposit",
-            reference,
-            status: "successful",
+      const { amount } = req.body;
+      if (!amount || amount <= 0)
+        return res.status(400).json({ message: "Invalid amount" });
+  
+      const wallet = await Wallet.findOne({ user: req.user.id });
+      if (!wallet)
+        return res.status(400).json({
+          status: false,
+          message: "No wallet exists for this user. Complete KYC to create wallet."
         });
-
-        wallet.balance += amount;
-        wallet.lastTransaction = new Date();
-        await wallet.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Deposit successfuly",
-            wallet,
-            transaction,
-        });
-    } catch (error) {
-        return res.status(500).json({ success: false, message: error.message})
+  
+      const reference = uuidv4();
+  
+      const response = await axios.post(
+        "https://payment.xpress-wallet.com/api/v1/wallet/credit",
+        {
+          amount,
+          reference,
+          customerId: wallet.xpressCustomerId,
+          metadata: { purpose: "deposit" }
+        },
+        {
+          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` }
+        }
+      );
+  
+      await Transaction.create({
+        user: req.user.id,
+        type: "credit",
+        amount,
+        purpose: "deposit",
+        reference,
+        status: "successful",
+        metadata: response.data
+      });
+  
+      return res.json({ success: true, reference, xpress: response.data });
+    } catch (err) {
+      return res
+        .status(500)
+        .json({ message: err.response?.data?.message || err.message });
     }
-};
+  };
+  
+  
 
 // Withdraw funds 
 export const withdrawFunds = async (req, res) => {
-//   console.log("Request body received:", req.body);
-
-  const { amount } = req.body;
-
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: "Invalid amount" });
-  }
-
-  try {
-    const wallet = await Wallet.findOne({ user: req.user.id });
-    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
-
-    if (wallet.balance < amount) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Insufficient balance" });
-    }
-
-    const reference = uuidv4();
-
-    const transaction = await Transaction.create({
-      user: req.user.id,
-      type: "debit",
-      amount,
-      purpose: "withdrawal",
-      reference,
-      status: "successful",
-    });
-
-    wallet.balance -= amount;
-    wallet.lastTransaction = new Date();
-    await wallet.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Withdrawal successful",
-      wallet,
-      transaction,
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-
-// Get Balance 
-export const getWalletBalance = async (req, res) => {
     try {
-        const wallet = await Wallet.findOne({ user: req.user.id });
-        if (!wallet) 
-            return res.status(404).json({ success: false, message: "Wallet not found" });
-
-        return res.status(200).json({
-            success: true,
-            balance: wallet.balance,
-            currency: wallet.currency,
-        });
-    } catch (error) {
-        return res.status(500).json({ success: false, message: error.message });
+      const { amount, bankCode, accountNumber } = req.body;
+      const wallet = await getUserWallet(req.user.id);
+  
+      const response = await axios.post(
+        "https://payment.xpress-wallet.com/api/v1/wallet/debit",
+        {
+          customerId: wallet.xpressCustomerId,
+          amount,
+          bankCode,
+          accountNumber,
+        },
+        {
+          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        }
+      );
+  
+      const trx = await createTransaction({
+        userId: req.user.id,
+        type: "debit",
+        amount,
+        purpose: "withdrawal",
+        reference: response.data?.data?.reference,
+        metadata: response.data,
+      });
+  
+      return res.json({ success: true, transaction: trx, xpress: response.data });
+    } catch (err) {
+      return res.status(500).json({ message: err.response?.data?.message || err.message });
     }
+  };
+  
+  
+
+
+// Get wallet balance
+export const getWalletBalance = async (req, res) => {
+  try {
+    const wallet = await getUserWallet(req.user.id);
+
+    const response = await axios.get(
+      `https://payment.xpress-wallet.com/api/v1/wallet/balance/${wallet.xpressWalletId}`,
+      { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
+    );
+
+    return res.json({
+      success: true,
+      balance: response.data?.data?.balance,
+      currency: "NGN",
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.response?.data?.message || err.message });
+  }
 };
+  
 
 
 // Get transaction history

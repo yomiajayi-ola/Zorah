@@ -1,5 +1,6 @@
 import KYC from "../models/Kyc.js";
 import User from "../models/User.js";
+import Wallet from "../models/Wallet.js";
 import axios from "axios";
 
 // ✅ submit KYC with multer support
@@ -59,41 +60,88 @@ export const submitKyc = async (req, res) => {
       passportPhoto,
       utilityBill,
     });
+
+    // 1. Split Full Name
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0];
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0]; // Use first name if no last name is found
     
-    // Prepare wallet payload
+    // 2. Format Tier String
+    const tierString = `TIER_${Number(tier)}`;
+    
+    // 3. Prepare Correct Wallet Payload
     const walletPayload = {
-      name: fullName,
-      phone: phoneNumber,
-      bvn,
-      nin,
-      address,
-      dob: dateOfBirth,
-      tier: Number(tier),
+      firstName: firstName,
+      lastName: lastName,
+      phoneNumber: phoneNumber, // Match required field name exactly
+      bvn: bvn,
+      nin: nin,
+      address: address,
+      dateOfBirth: dateOfBirth, // Match required field name exactly
+      tier: tierString, // Use the TIER_N string format
+      // You may also need to add 'email' if it's required by Xpress Wallet
     };
     
+    // Prepare wallet payload
+    // const walletPayload = {
+    //   name: fullName,
+    //   phone: phoneNumber,
+    //   bvn,
+    //   nin,
+    //   address,
+    //   dob: dateOfBirth,
+    //   tier: Number(tier),
+    // };
+    
     // Correct Xpress Wallet endpoint
+    console.log(process.env.XPRESS_WALLET_SECRET_KEY);
     const walletResponse = await axios.post(
-      "https://api.xpresswallet.io/api/v1/wallets",
+      "https://payment.xpress-wallet.com/api/v1/wallet",
       walletPayload,
       {
         headers: {
-          Authorization: `Bearer ${process.env.XPRESS_WALLET_API_KEY}`,
+          Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
           "Content-Type": "application/json",
         },
       }
     );
+
+    // Log the raw response data to see the true structure
+    // Extract wallet data from the 'wallet' object in the response
+    const xpressWalletData = walletResponse.data.wallet;
     
-    // Extract wallet data
-    const walletId = walletResponse.data?.data?.walletId;
-    const status = walletResponse.data?.data?.status;
+    // The unique ID for the user's wallet is the 'accountNumber'
+    const walletId = xpressWalletData?.accountNumber;
+    
+    // The status is available under the 'status' key
+    const status = xpressWalletData?.status; 
     
     // Save wallet info
     await User.findByIdAndUpdate(userId, { walletId });
-    await KYC.findByIdAndUpdate(kyc._id, { walletId, walletStatus: status });
+    await KYC.findByIdAndUpdate(kyc._id, { walletId, walletStatus: status }); // Assuming this is correct
+
+    // const data = response.data;
+
+    await Wallet.create({
+      user: req.user.id,
+      xpressCustomerId: walletResponse.data.customer.id,
+      xpressWalletId: walletResponse.data.wallet.walletId,
+      accountNumber: walletResponse.data.wallet.accountNumber,
+      accountName: walletResponse.data.wallet.accountName
+    });
     
+
+
+    // REFRESH THE KYC OBJECT (Use findById if you need the entire updated doc)
+    const updatedKyc = await KYC.findById(kyc._id);
+    // OR manually update the original 'kyc' object for a simpler fix:
+    kyc.walletId = walletId;
+    kyc.walletStatus = status; // Assuming 'walletStatus' is the right field name
+    // kyc.status = status; // Use this line if you want to update the main 'status' field
+
     return res.status(201).json({
       message: `KYC submitted successfully for Tier ${tier}. Wallet created.`,
-      data: { kyc, walletId, status },
+      data: { kyc, walletId, status }, // Now 'kyc' object will show the correct status
     });
   } catch (error) {
     console.error("KYC Error:", error.response?.data || error.message);
