@@ -46,6 +46,7 @@ export const setBudget = async (req, res) => {
 
 
 // @desc Fetch current budgets & show balance left 
+// @desc Fetch current budgets & show balance left 
 export const getBudgets = async (req, res) => {
 
   try {
@@ -53,46 +54,46 @@ export const getBudgets = async (req, res) => {
     // --- Prepare Query ---
     console.log("RAW QUERY:", req.query);
     
-    // 💡 NEW: Check if the 'monthsOnly' property exists in the query object at all.
-    // This is more resilient than checking for a specific string/boolean value.
     const isMonthsOnlyRequest = !!req.query.monthsOnly;
     
     // Destructure filtering parameters early
-    const { month, year, period } = req.query; 
+    const { month, year, period, status } = req.query; // ✅ Add status to destructuring
 
     const query = { user: req.user._id };
     
-    // ====== 1️⃣ RETURN ONLY MONTHS AVAILABLE ======
+    // ====== 1️⃣ RETURN ONLY MONTHS AVAILABLE (No Status Filter Applied Here) ======
     if (isMonthsOnlyRequest) {
       console.log("EXECUTING: UNIQUE MONTHS LOGIC");
       
-      // We don't apply month/year/period filters here, as we want ALL periods.
       const budgets = await Budget.find(query)
         .select("month year -_id")
         .sort({ year: 1, month: 1 });
 
-      // Create unique list of month/year combinations
-      const uniqueMonths = Array.from(
-        new Map(
-          budgets.map(b => [`${b.year}-${b.month}`, b])
-        ).values()
-      ).map(b => ({ month: b.month, year: b.year })); // Clean the output structure
-
-      // 🛑 Return the unique months and STOP
+      // ... (rest of uniqueMonths logic) ...
       return res.status(200).json({ months: uniqueMonths });
     }
 
-    // --- Build Filtering Query (If not monthsOnly) ---
     // --- Build Filtering Query (If not monthsOnly) ---
     console.log("EXECUTING: BUDGET BREAKDOWN LOGIC");
     
     // If month, year, or period are provided, add them to the query object
     if (month) query.month = Number(month);
     if (year) query.year = Number(year);
-    // Normalize and add the period filter
     if (period) query.period = period.toString().trim().toLowerCase(); 
 
-    // ====== FETCH FILTERED BUDGETS (OR ALL) ======
+    // =========================================================
+    // ✅ FIX 1: DEFAULT STATUS FILTER
+    // Only return 'active' budgets unless 'status' is explicitly provided in the URL query.
+    // =========================================================
+    if (status) {
+        query.status = status.toString().trim().toLowerCase();
+    } else {
+        // This is the default behavior you want: Hide archived budgets
+        query.status = "active";
+    }
+    // =========================================================
+
+    // ====== FETCH FILTERED BUDGETS (OR ALL ACTIVE) ======
     const budgets = await Budget.find(query);
 
     // ====== 3️⃣ BREAKDOWN CALCULATION & FULL PAYLOAD MERGE ======
@@ -102,6 +103,10 @@ export const getBudgets = async (req, res) => {
         // Convert the Mongoose document to a plain JavaScript object
         const budgetObject = budget.toObject(); 
 
+        // 🎯 FIX 2: Rename the DB status to 'archiveStatus' before calculating the spending status.
+        const archiveStatus = budgetObject.status;
+        delete budgetObject.status; // Prevent the calculated status from overwriting the DB status
+        
         const spent = await Expense.aggregate([
           {
             $match: {
@@ -117,14 +122,15 @@ export const getBudgets = async (req, res) => {
         const remaining = budget.amount - totalSpent;
         const percentageused = ((totalSpent / budget.amount) * 100).toFixed(2);
         
-        // 💡 CRITICAL CHANGE: Merge original budget fields and calculated fields
+        // 💡 CRITICAL CHANGE: Return the new fields
         return {
-          ...budgetObject, // Include ALL original fields (month, year, startDate, etc.)
-          Limit: budget.amount, // Rename 'amount' to 'Limit' for consistency
+          ...budgetObject, 
+          Limit: budget.amount, 
+          archiveStatus: archiveStatus, // <-- NEW: Shows 'active' or 'archived' from DB
           totalSpent,
           remaining,
           percentageused: `${percentageused}%`,
-          status:
+          spendingStatus: // <-- NEW FIELD NAME for the calculated status
             remaining <= 0
               ? "over budget 🚨"
               : remaining < budget.amount * 0.1
@@ -146,7 +152,6 @@ export const getBudgets = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 
 export const getBudgetById = async (req, res) => {
