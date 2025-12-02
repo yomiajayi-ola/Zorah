@@ -240,6 +240,28 @@ export const getBudgetById = async (req, res) => {
     }
   };
 
+
+// @route GET /api/budgets/archived
+// @access Private
+export const getArchivedBudgets = async (req, res) => {
+    try {
+        const archivedBudgets = await Budget.find({ 
+            user: req.user._id,
+            status: "archived" // Filters by the archived status
+        });
+        
+        if (archivedBudgets.length === 0) {
+            // Optional: return a 200 with an empty array if nothing is found
+            return res.status(200).json({ message: "No archived budgets found.", budgets: [] });
+        }
+
+        res.json(archivedBudgets);
+    } catch (error) {
+        console.error("Error in getArchivedBudgets:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
   
   export const restoreBudget = async (req, res) => {
     try {

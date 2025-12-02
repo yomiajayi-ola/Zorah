@@ -93,12 +93,110 @@ export const addExpense = async (req, res) => {
 
 // @desc Get All expenses for user 
 export const getExpense = async (req, res) => {
-    try {
-        const expenses = await Expense.find({ user: req.user.id}).sort({ date: -1 });
-        res.json(expenses);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+      // --- Prepare Query ---
+      const isMonthsOnlyRequest = !!req.query.monthsOnly;
+      const { month, year, category, status } = req.query; 
+      
+      const userId = req.user._id; 
+      const query = { user: userId };
+      
+      // ====== 1️⃣ RETURN ONLY MONTHS AVAILABLE (monthsOnly=true) ======
+      if (isMonthsOnlyRequest) {
+          
+          const uniqueMonths = await Expense.aggregate([
+              { $match: query }, // Filter by user ID
+              {
+                  $group: {
+                      _id: {
+                          month: { $month: "$date" },
+                          year: { $year: "$date" }
+                      }
+                  }
+              },
+              {
+                  $project: {
+                      _id: 0,
+                      month: "$_id.month",
+                      year: "$_id.year"
+                  }
+              },
+              { $sort: { year: 1, month: 1 } }
+          ]);
+
+          return res.status(200).json({ months: uniqueMonths });
+      }
+
+      // --- Build Filtering Query (If not monthsOnly) ---
+      
+      // A. Filter by status (Default to 'active')
+      if (status) {
+          query.status = status.toString().trim().toLowerCase();
+      } else {
+          // Default behavior: only show active expenses
+          query.status = "active"; 
+      }
+
+      // B. Filter by month and year (Requires calculating date range)
+      if (month && year) {
+          const m = Number(month);
+          const y = Number(year);
+          
+          // Start of the month (e.g., 2026-01-01T00:00:00.000Z)
+          const startOfMonth = new Date(y, m - 1, 1);
+          
+          // End of the month (Day 0 of the next month)
+          const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999); 
+          
+          query.date = {
+              $gte: startOfMonth,
+              $lte: endOfMonth
+          };
+      } else if (month || year) {
+          // Error handling if only one is provided
+          return res.status(400).json({ message: "Must provide both month and year for date filtering." });
+      }
+
+      // C. Filter by category
+      if (category) {
+          query.category = category.toString().trim();
+      }
+
+      // ====== FETCH FILTERED EXPENSES ======
+      const expenses = await Expense.find(query)
+                                  .sort({ date: -1 }); // Sort by date descending
+
+      // ====== 3️⃣ DATA MAPPING AND STRUCTURE ADJUSTMENT (NEW LOGIC) ======
+      const data = expenses.map((expense) => {
+          
+          // Convert Mongoose document to a plain object
+          const expenseObject = expense.toObject(); 
+
+          // Calculate month and year from the date field
+          const d = expense.date; 
+          const expenseMonth = d.getMonth() + 1; // getMonth() returns 0-11, so +1
+          const expenseYear = d.getFullYear();
+
+          // Return the new structured object with month/year added
+          return {
+              ...expenseObject, 
+              month: expenseMonth,
+              year: expenseYear,
+          };
+      });
+
+
+      // 🛑 Return the expenses data
+      return res.json({
+          data: data, 
+          month: month ? Number(month) : null,
+          year: year ? Number(year) : null
+      });
+
+  } catch (error) {
+      console.error("Error in getExpense:", error);
+      res.status(500).json({ message: error.message });
+  }
 };
 
 // @desc Get Expense summary (total per category)

@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import path from 'path';
+import bodyParser from 'body-parser';
 // import { API_URL, DB_KEY } from '@env';
 import cors from "cors";
 import connectDB from "./config/db.js";
@@ -34,6 +35,17 @@ app.use((err, req, res, next) => {
   next();
 });
 app.use(cors());
+
+app.use('/api/payment/webhook', bodyParser.json({
+  // We add a `verify` function to store the raw body buffer.
+  verify: (req, res, buf) => {
+      if (buf && buf.length) {
+          // Save the raw body buffer to a property on the request object.
+          // This buffer is what the payment gateway uses to calculate its signature.
+          req.rawBody = buf; 
+      }
+  }
+}));
 
 // Routes
 app.use("/api/auth", authRoutes);

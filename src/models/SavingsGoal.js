@@ -15,6 +15,12 @@ const savingsGoalSchema = new mongoose.Schema({
         default: "active"
       },
     createdAt: { type: Date, default: Date.now },
+    fundingHistory: [
+      {
+          amount: { type: Number, required: true },
+          date: { type: Date, default: Date.now }
+      }
+  ]
 });
 
 export default mongoose.model("SavingsGoal", savingsGoalSchema);

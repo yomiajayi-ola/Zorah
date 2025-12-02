@@ -10,6 +10,7 @@ import {
   archiveBudget,
   restoreBudget,
   deleteBudgetPermanently,
+  getArchivedBudgets,
 } from "../controllers/budgetController.js";
 
 const router = express.Router();
@@ -19,6 +20,9 @@ router.post("/", protect, setBudget);
 
 // Get all active budgets
 router.get("/get-budgets", protect, getBudgets)
+
+// Get Archived budget
+router.get("/archived", protect, getArchivedBudgets);
 
 // Get all active budgets with monhts
 // router.get("/get-budgets-months", protect, getBudgetMonths)

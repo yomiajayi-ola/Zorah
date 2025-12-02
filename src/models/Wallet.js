@@ -9,6 +9,8 @@ const walletSchema = new mongoose.Schema(
     accountNumber: { type: String, required: true },
     accountName: { type: String, required: true },
 
+    balance: { type: Number, default: 0, required: true },
+
     providerReference: { type: String },
     status: { type: String, default: "active" },
     currency: { type: String, default: "NGN" }
