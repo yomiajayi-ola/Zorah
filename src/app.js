@@ -16,6 +16,7 @@ import walletRoutes from "./routes/walletRoutes.js";
 import incomeRoutes from "./routes/income.routes.js";
 import categoryRoutes from './routes/category.routes.js';
 import kycRoutes from "./routes/kycRoutes.js";
+import aiRoutes from "./routes/ai.routes.js"
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -59,6 +60,7 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/income", incomeRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use("/api/kyc", kycRoutes);
+app.use("/api/ai", aiRoutes);
 
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);

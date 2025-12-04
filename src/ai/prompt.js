@@ -1,5 +1,5 @@
 export const systemPrompt = `
-You are PocketMonie's AI Financial Assistant.
+You are Zorah's AI Financial Assistant.
 Your job is to analyze user financial data and give:
 - insights
 - recommendations

@@ -1,6 +1,6 @@
 import express from "express";
 import { aiAssistant } from "../ai/assistant.js";
-import { protect } from "../middleware/auth.js";
+import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
