@@ -197,9 +197,9 @@ export const resetPassword = async (req, res) => {
     }
 
     // Update password
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-
+    // const salt = await bcrypt.genSalt(10);
+    // user.password = await bcrypt.hash(newPassword, salt);
+    user.password = newPassword;
     // Clear OTP
     user.otp = undefined;
     user.otpExpires = undefined;
