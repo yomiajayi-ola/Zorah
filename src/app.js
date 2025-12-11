@@ -16,7 +16,8 @@ import walletRoutes from "./routes/walletRoutes.js";
 import incomeRoutes from "./routes/income.routes.js";
 import categoryRoutes from './routes/category.routes.js';
 import kycRoutes from "./routes/kycRoutes.js";
-import aiRoutes from "./routes/ai.routes.js"
+import aiRoutes from "./routes/ai.routes.js";
+import voiceRoutes from "./routes/voice.routes.js"
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -61,6 +62,8 @@ app.use("/api/income", incomeRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/voice", voiceRoutes);
+
 
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -72,13 +75,13 @@ app.use('/images', express.static('public/images'));
 // Database
 connectDB();
 
-app.get("/", (req, res) => {
+app.get("/api", (req, res) => {
     res.send("Zorah API is running");
   });
   
-  // app.get('/api/v1/health', (req, res) => {
-  //   res.json({ status: 'Zorah backend is live 🚀' });
-  // });
+  app.get('/api/v1/health', (req, res) => {
+    res.json({ status: 'Zorah backend is live 🚀' });
+  });
   
 
 const PORT = process.env.PORT || 4000;
