@@ -5,19 +5,19 @@ import bodyParser from 'body-parser';
 // import { API_URL, DB_KEY } from '@env';
 import cors from "cors";
 import connectDB from "./config/db.js";
-import authRoutes from "../src/routes/auth.routes.js";
-import expenseRoutes from "../src/routes/expense.routes.js";
-import budgetRoutes from "../src/routes/budget.routes.js"
-import notificationRoutes from "../src/routes/notification.routes.js"
-import savingsRoutes from "../src/routes/savings.routes.js";
-import esusuRoutes from "../src/routes/esusu.routes.js"
-import esusuPayoutRoutes from "../src/routes/esusuPayoutRoutes.js";
-import walletRoutes from "../src/routes/walletRoutes.js";
-import incomeRoutes from "../src/routes/income.routes.js";
-import categoryRoutes from '../src/routes/category.routes.js';
-import kycRoutes from "../src/routes/kycRoutes.js";
-import aiRoutes from "../src/routes/ai.routes.js";
-import voiceRoutes from "../src/routes/voice.routes.js"
+import authRoutes from "./routes/auth.routes.js";
+import expenseRoutes from "./routes/expense.routes.js";
+import budgetRoutes from "./routes/budget.routes.js"
+import notificationRoutes from "./routes/notification.routes.js"
+import savingsRoutes from "./routes/savings.routes.js";
+import esusuRoutes from "./routes/esusu.routes.js"
+import esusuPayoutRoutes from "./routes/esusuPayoutRoutes.js";
+import walletRoutes from "./routes/walletRoutes.js"; // <-- Note: NO 'src' here
+import incomeRoutes from "./routes/income.routes.js";
+import categoryRoutes from './routes/category.routes.js';
+import kycRoutes from "./routes/kycRoutes.js";
+import aiRoutes from "./routes/ai.routes.js";
+import voiceRoutes from "./routes/voice.routes.js"
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -82,6 +82,11 @@ app.get("/api", (req, res) => {
   app.get('/api/v1/health', (req, res) => {
     res.json({ status: 'Zorah backend is live 🚀' });
   });
+
+  // server.js (put this right after your middleware)
+app.post("/api/test-route", (req, res) => {
+    res.json({ message: "Test route works!" });
+});
   
 
 const PORT = process.env.PORT || 4000;
