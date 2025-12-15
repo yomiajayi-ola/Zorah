@@ -1,5 +1,7 @@
-import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
 import path from 'path';
 import bodyParser from 'body-parser';
 // import { API_URL, DB_KEY } from '@env';
@@ -25,7 +27,7 @@ import voiceRoutes from "./routes/voice.routes.js"
 
 
 
-dotenv.config();
+
 const app = express();
 
 // Middleware
