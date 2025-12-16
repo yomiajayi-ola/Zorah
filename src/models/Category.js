@@ -12,8 +12,8 @@ const categorySchema = new mongoose.Schema({
     enum: ['budget', 'expense', 'income', 'savings', 'bonus'],
     required: true
   },
-  image: { type: String, default: '' },         // optional main image for parent
-  subcategories: [subCategorySchema]           // array of subcategories
+  image: { type: String, default: '' },       
+  subcategories: [subCategorySchema]           
 }, { timestamps: true });
 
 export default mongoose.model('Category', categorySchema);
