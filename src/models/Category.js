@@ -9,7 +9,7 @@ const categorySchema = new mongoose.Schema({
   name: { type: String, required: true },       // e.g., "Budget"
   type: {
     type: String,
-    enum: ['budget', 'expense', 'income', 'savings'],
+    enum: ['budget', 'expense', 'income', 'savings', 'bonus'],
     required: true
   },
   image: { type: String, default: '' },         // optional main image for parent
