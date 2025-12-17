@@ -20,6 +20,7 @@ import categoryRoutes from './routes/category.routes.js';
 import kycRoutes from "./routes/kycRoutes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import voiceRoutes from "./routes/voice.routes.js"
+import webhookRoutes from "./routes/webhook.routes.js"
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -40,16 +41,21 @@ app.use((err, req, res, next) => {
 });
 app.use(cors());
 
-app.use('/api/payment/webhook', bodyParser.json({
-  // We add a `verify` function to store the raw body buffer.
-  verify: (req, res, buf) => {
-      if (buf && buf.length) {
-          // Save the raw body buffer to a property on the request object.
-          // This buffer is what the payment gateway uses to calculate its signature.
-          req.rawBody = buf; 
-      }
-  }
-}));
+// app.use('/api/payment/webhook', bodyParser.json({
+//   // We add a `verify` function to store the raw body buffer.
+//   verify: (req, res, buf) => {
+//       if (buf && buf.length) {
+//           // Save the raw body buffer to a property on the request object.
+//           // This buffer is what the payment gateway uses to calculate its signature.
+//           req.rawBody = buf; 
+//       }
+//   }
+// }));
+
+app.use(
+  "/api/webhooks",
+  express.raw({ type: "application/json" })
+);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -65,6 +71,7 @@ app.use('/api/categories', categoryRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/voice", voiceRoutes);
+app.use("/api/webhooks", webhookRoutes);
 
 
 
