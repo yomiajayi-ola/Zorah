@@ -1,5 +1,7 @@
 import express from "express";
 import { registerUser, loginUser, getProfile, setUserPin, verifyUserPin, toggleBiometric, requestPasswordReset, resetPassword, refreshAccessToken } from "../controllers/authController.js";
+import { googleAuth } from "../controllers/googleAuthController.js";
+
 import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -10,6 +12,7 @@ router.get("/profile", protect, getProfile);
 router.post("/request-reset", requestPasswordReset);
 router.post("/reset-password", resetPassword);
 router.post("/refresh-token", refreshAccessToken)
+router.post("/google", googleAuth);
 
 
 // PIN $ biometric routes

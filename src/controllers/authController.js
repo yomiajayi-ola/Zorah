@@ -6,9 +6,9 @@ import { access } from "fs";
 import { sendEmail } from "../utils/sendEmail.js";
 
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
-};
+// const generateToken = (id) => {
+//   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
+// };
 
 // @desc Register new user
 export const registerUser = async (req, res) => {
@@ -40,6 +40,12 @@ export const loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: "Invalid email or password" });
+
+    if (user.authProvider === "google") {
+      return res.status(400).json({
+        message: "Please login with Google",
+      });
+    }    
 
     const isMatch = await user.matchPassword(password);
     if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
@@ -133,7 +139,7 @@ export const toggleBiometric = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    User.biometricEnabled = enabled;
+    user.biometricEnabled = enabled;
     await user.save();
 
     res.json({
@@ -203,6 +209,12 @@ export const resetPassword = async (req, res) => {
     // Clear OTP
     user.otp = undefined;
     user.otpExpires = undefined;
+
+    if (user.authProvider === "google") {
+      return res.status(400).json({
+        message: "Password reset not available for Google accounts",
+      });
+    }    
 
     await user.save();
 

@@ -19,6 +19,8 @@ const userSchema = new mongoose.Schema({
 
   googleId: { type: String },
 
+  refreshToken: { type: String },
+
   authProvider: {
     type: String,
     enum: ["local", "google"],
@@ -28,7 +30,12 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 userSchema.pre("save", async function(next) {
+  // 1. New Check: If the user's authentication provider is NOT "local", skip password hashing entirely.
+  if (this.authProvider !== "local") return next();
+
+  // 2. Existing Checks: Only hash if the password field was modified AND it's not null/empty.
   if (!this.isModified("password") || !this.password) return next();
+  
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
   next();
