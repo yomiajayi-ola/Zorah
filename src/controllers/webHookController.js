@@ -1,48 +1,31 @@
 // /controllers/webhookController.js
+import Transaction from "../models/Transaction.js";
+import { verifySignature } from '../utils/signatureUtils.js';
 
-import { verifySignature } from '../utils/signatureUtils.js'; // Assuming this path is correct
-// import other necessary modules (Wallet, Transaction, etc.)
 
-// export const handleWebhook = async (req, res) => {
-//     // A. Acknowledge Receipt Immediately
-//     // Essential: Return a 200 OK fast to prevent the sender from retrying the hook.
-//     res.status(200).send('OK'); 
+export const handleWebhook = async (req, res) => {
+  // 1. Tell Xpress Wallet you received the data
+  res.status(200).send('OK');
 
-//     // B. Security Check (Crucial!)
-//     // Pass the request object (req) and the secret key to the verification function
-//     if (!verifySignature(req, process.env.XPRESS_WEBHOOK_SECRET)) {
-//         console.error("Webhook failed signature verification. Unauthorized request ignored.");
-//         return; // Stop processing unauthorized request
-//     }
+  try {
+      const { eventType, data } = req.body;
 
-//     // C. Process the Event (Only if signature is valid)
-//     try {
-//         const event = req.body;
-//         const { eventType, data } = event; 
+      // 2. Filter for successful transactions
+      if (eventType === 'transaction.success') {
+          const reference = data.reference;
 
-//         if (eventType === 'transaction.success') {
-//             const transactionReference = data.reference; 
-//             const amount = data.amount;
+          // 3. Update the specific transaction record
+          const transaction = await Transaction.findOneAndUpdate(
+              { reference: reference, status: "pending" },
+              { $set: { status: "successful", updatedAt: new Date() } },
+              { new: true }
+          );
 
-//             // TODO: Add database update logic here:
-//             // 1. Find the pending Transaction using the reference.
-//             // 2. Find the Wallet using the transaction's user ID.
-//             // 3. Update wallet.balance += amount and wallet.save().
-//             // 4. Update transaction.status = "successful" and transaction.save().
-
-//             console.log(`Received successful transaction for ref: ${transactionReference}, amount: ${amount}`);
-//         }
-//     } catch (error) {
-//         // Log the error but do not send an error response (you already sent 200 OK).
-//         console.error("Error processing webhook event:", error);
-//     }
-// };
-
-export const xpressWalletWebhook = async (req, res) => {
-    console.log("Xpress Wallet Webhook Received:", req.body);
-  
-    return res.status(200).json({
-      received: true,
-      message: "Webhook endpoint active"
-    });
-  };
+          if (transaction) {
+              console.log(`✅ Funding History updated for ref: ${reference}`);
+          }
+      }
+  } catch (error) {
+      console.error("Webhook processing error:", error);
+  }
+};

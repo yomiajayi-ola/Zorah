@@ -46,7 +46,7 @@ export const depositFunds = async (req, res) => {
         amount,
         purpose: "deposit",
         reference,
-        status: "successful",
+        status: "pending",
         metadata: response.data
       });
   
@@ -98,25 +98,23 @@ export const withdrawFunds = async (req, res) => {
 
 
 // Get wallet balance
+// /controllers/walletController.js
 export const getWalletBalance = async (req, res) => {
   try {
-    const wallet = await getUserWallet(req.user.id);
+      const transactions = await Transaction.find({ 
+          user: req.user.id, 
+          status: "successful" 
+      });
 
-    const response = await axios.get(
-      `https://payment.xpress-wallet.com/api/v1/wallet/balance/${wallet.xpressWalletId}`,
-      { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
-    );
+      const balance = transactions.reduce((acc, curr) => {
+          return curr.type === 'credit' ? acc + curr.amount : acc - curr.amount;
+      }, 0);
 
-    return res.json({
-      success: true,
-      balance: response.data?.data?.balance,
-      currency: "NGN",
-    });
-  } catch (err) {
-    return res.status(500).json({ message: err.response?.data?.message || err.message });
+      return res.json({ success: true, balance });
+  } catch (error) {
+      res.status(500).json({ message: error.message });
   }
 };
-  
 
 
 // Get transaction history
@@ -129,3 +127,18 @@ export const getTransactions = async (req, res) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 }
+
+// Get funding history
+export const getFundingHistory = async (req, res) => {
+  try {
+      const history = await Transaction.find({ 
+          user: req.user.id, 
+          status: "successful", // ✅ Only show confirmed money
+          purpose: "deposit" 
+      }).sort({ createdAt: -1 });
+
+      return res.json({ success: true, history });
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+};

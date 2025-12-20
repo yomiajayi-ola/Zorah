@@ -26,7 +26,7 @@ export const registerUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      token,
+      token,a
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
