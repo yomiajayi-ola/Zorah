@@ -20,43 +20,47 @@ export const createGoal = async (req, res) => {
 };
 
 // @desc Add contribution
-// @desc Add contribution
+// @desc Add contributiona
+// /controllers/savingsController.js
 export const addContribution = async (req, res) => {
   try {
     const { goalId, amount } = req.body;
     const userId = req.user._id;
 
-    // Find user's goal
+    // A. Find the Goal
     const goal = await SavingsGoal.findOne({ _id: goalId, user: userId });
-    if (!goal)
-      return res.status(404).json({ message: "Goal not found" });
+    if (!goal) return res.status(404).json({ message: "Goal not found" });
 
-    // Step 1: Debit the user’s wallet first
-    // Assuming debitWallet is successful...
+    // B. Real-Time Balance Check (Optional but recommended)
+    // You can call your getWalletBalance function here to ensure 
+    // the user has enough money before even hitting the API.
+
+    // C. Execute the Debit in Real-Time
+    // This calls Xpress Wallet API to actually move the money
     await debitWallet(userId, amount, "savings_contribution", goal._id);
 
-    // Step 2: Add contribution to goal
-    goal.currentAmount += amount;
+    // D. Update the Goal amount locally
+    goal.currentAmount += Number(amount);
     
-    // **NEW CODE ADDED HERE**
+    // E. Update Goal's internal funding history
     goal.fundingHistory.push({
         amount: amount,
-        date: new Date() // Records the contribution time
+        date: new Date()
     });
     
     await goal.save();
 
-    // Step 3: Compute progress
     const progress = ((goal.currentAmount / goal.targetAmount) * 100).toFixed(2);
 
     return res.json({
       message: "Contribution added successfully",
+      balance_deducted: amount,
       progress: `${progress}%`,
-      goal, // The returned 'goal' object will now include 'fundingHistory'
+      goal,
     });
   } catch (error) {
-    console.error("Error adding savings contribution:", error);
-    return res.status(500).json({ message: error.message });
+    // If debitWallet throws "Insufficient balance", it caught here
+    return res.status(400).json({ message: error.message });
   }
 };
   
