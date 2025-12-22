@@ -171,3 +171,19 @@ export const deleteGoalPermanently = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// /controllers/savingsController.js
+export const getGoalFundingHistory = async (req, res) => {
+  try {
+      const history = await Transaction.find({ 
+          user: req.user.id, 
+          purpose: "savings_contribution", // Filter for savings money
+          reference: req.params.goalId,     // The goal ID we saved as reference
+          status: "successful"
+      }).sort({ createdAt: -1 });
+
+      return res.json({ success: true, history });
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
+};
