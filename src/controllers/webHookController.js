@@ -5,6 +5,10 @@ import { verifySignature } from '../utils/signatureUtils.js';
 
 export const handleWebhook = async (req, res) => {
   // 1. Tell Xpress Wallet you received the data
+
+  console.log("--- WEBHOOK HEADERS RECEIVED ---");
+  console.log(JSON.stringify(req.headers, null, 2));
+  
   res.status(200).send('OK');
 
   try {

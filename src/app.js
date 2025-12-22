@@ -52,10 +52,14 @@ app.use(cors());
 //   }
 // }));
 
-app.use(
-  "/api/webhooks",
-  express.raw({ type: "application/json" })
-);
+app.use(express.json({
+  verify: (req, res, buf) => {
+    // Check if the request is going to the webhook path
+    if (req.originalUrl.startsWith('/api/webhooks')) {
+      req.rawBody = buf; // Store the raw buffer for signature verification
+    }
+  }
+}));
 
 // Routes
 app.use("/api/auth", authRoutes);
