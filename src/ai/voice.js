@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Transactions from "../models/Transaction.js";
 import { retryGeminiRequest } from "../utils/geminiRetry.js";
+import crypto from "crypto";
 
 // 1. Function declaration Gemini can call
 const addExpenseDeclaration = {
@@ -70,18 +71,21 @@ export const voiceExpenseLogger = async (req, res) => {
         throw err;
       }
   
+      // ... after getting the result
       const response = result.response;
-      
-      // Handling the case where the model returns natural language instead of a function call
-      if (!response.functionCalls || response.functionCalls.length === 0) {
+      const candidate = response.candidates?.[0];
+      const functionCallPart = candidate?.content?.parts?.find(p => p.functionCall);
+
+      // Check if a function call exists in the response parts
+      if (!functionCallPart) {
         return res.status(422).json({
           status: "failed",
           message: "I couldn’t understand that clearly. Try something like: 'I spent 2500 on transport.'",
         });
       }
-  
-      const { amount, category, description, date } = response.functionCalls[0].args || {};
-  
+
+      // Extract the arguments from the function call part
+      const { amount, category, description, date } = functionCallPart.functionCall.args || {};
       if (!amount || !category || !description) {
         return res.status(422).json({
           status: "failed",
@@ -89,15 +93,21 @@ export const voiceExpenseLogger = async (req, res) => {
         });
       }
   
+      // ... after extracting amount, category, description from AI
       const newTransaction = await Transactions.create({
         user: req.user.id,
-        amount,
-        category,
-        description,
-        date: date ? new Date(date) : new Date(),
-        type: "expense",
+        amount: amount,
+        type: "debit", 
+        purpose: "other", 
+        // Generate a unique reference to satisfy the unique: true constraint
+        reference: `VOICE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`, 
+        status: "successful", 
+        metadata: { 
+          category, 
+          description 
+        } 
       });
-  
+        
       return res.json({
         status: "success",
         message: `Logged ₦${amount} under ${category}.`,
