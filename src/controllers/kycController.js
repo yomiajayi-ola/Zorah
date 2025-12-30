@@ -32,8 +32,8 @@ export const submitKyc = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
 
     // Handle file uploads
-    const passportPhoto = req.files?.passportPhoto?.[0]?.buffer; // or .path/.location if S3
-    const utilityBill = req.files?.utilityBill?.[0]?.buffer;
+    const passportPhoto = req.files?.['passportPhoto'] ? req.files['passportPhoto'][0].location : null;
+    const utilityBill = req.files?.['utilityBill'] ? req.files['utilityBill'][0].buffer : null;   
 
     // Tier validation
     if (Number(tier) === 2 && !passportPhoto) {

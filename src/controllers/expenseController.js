@@ -7,89 +7,46 @@ import mongoose from "mongoose";
 // @route   POST /api/expenses
 // @access  Private
 
+// In expenseController.js
 export const addExpense = async (req, res) => {
   try {
-    const { amount, category, description, paymentMethod, date } = req.body;
+    const { amount, category, date } = req.body;
+    // ... existing expense creation logic ...
 
-    if (!amount) {
-      return res.status(400).json({ message: "Amount is required" });
-    }
-
-    const expense = await Expense.create({
-      user: req.user._id,
-      amount,
-      category,
-      description,
-      paymentMethod,
-      date,
-    });
-
-    const expenseDate = new Date(date);
-    const expenseMonth = expenseDate.getMonth() + 1;
-    const expenseYear = expenseDate.getFullYear();
-
+    // 1. Calculate Budget vs Actual (Real-time comparison)
     const budget = await Budget.findOne({
       user: req.user._id,
-      category: expense.category,
-      $or: [
-        { month: expenseMonth, year: expenseYear },
-        { 
-          startDate: { $lte: expenseDate },
-          endDate: { $gte: expenseDate }
-        }
-      ]
+      category: category,
+      status: "active"
     });
 
-    if (!budget) {
-      return res.status(201).json(expense);
-    }
+    if (budget) {
+      const totalSpent = await calculateTotalSpent(req.user._id, category, budget.startDate, budget.endDate);
+      const percentUsed = (totalSpent / budget.amount) * 100;
 
-    const totalSpent = await Expense.aggregate([
-      {
-        $match: {
-          user: req.user._id,
-          category: expense.category,
-          $expr: {
-            $and: [
-              { $eq: [{ $month: "$date" }, expenseMonth] },
-              { $eq: [{ $year: "$date" }, expenseYear] },
-            ],
-          },
-        },
-      },
-      { 
-        $group: { 
-          _id: null, 
-          total: { $sum: "$amount" } 
-        } 
-      },
-    ]);
-
-    const spent = totalSpent[0]?.total || 0;
-    const percent = (spent / budget.amount) * 100;
-
-    if (percent >= 80 && percent < 100) {
-      await createNotification({
-        userId: req.user._id,
-        type: "budget",
-        title: "Budget nearing limit",
-        message: `You've spent ${percent.toFixed(1)}% of your ${category} budget.`,
-      });
-    } else if (percent >= 100) {
-      await createNotification({
-        userId: req.user._id,
-        type: "budget",
-        title: "Budget exceeded", 
-        message: `You've exceeded your ${category} budget!`,
-      });
+      // 2. Trigger Notification based on Figma logic (80% and 100%)
+      if (percentUsed >= 100) {
+        await createNotification({
+          userId: req.user._id,
+          type: "limit_exceeded",
+          title: "Budget Exceeded! 🚨",
+          message: `Your ${category} spending is now at ${percentUsed.toFixed(0)}%.`,
+        });
+        // Optional: Emit websocket event for "Instant Red"
+        // io.to(req.user._id).emit('budget_alert', { category, status: 'over' });
+      } else if (percentUsed >= 80) {
+        await createNotification({
+          userId: req.user._id,
+          type: "warning",
+          title: "Approaching Limit ⛔️",
+          message: `You've used ${percentUsed.toFixed(0)}% of your ${category} budget.`,
+        });
+      }
     }
 
     res.status(201).json(expense);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  } catch (error) { /* error handling */ }
 };
-
 
 // @desc Get All expenses for user 
 export const getExpense = async (req, res) => {

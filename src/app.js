@@ -1,9 +1,11 @@
-import dotenv from "dotenv";
 dotenv.config();
+import dotenv from "dotenv";
+
 
 import express from "express";
 import path from 'path';
 import bodyParser from 'body-parser';
+import admin from "./config/firebase.js";
 // import { API_URL, DB_KEY } from '@env';
 import cors from "cors";
 import connectDB from "./config/db.js";
@@ -27,7 +29,7 @@ import webhookRoutes from "./routes/webhook.routes.js"
 // const api = Config.API_URL;
 
 
-
+console.log("Firebase Initialized", admin.apps.length)
 
 const app = express();
 
