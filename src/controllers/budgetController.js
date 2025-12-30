@@ -130,12 +130,12 @@ export const getBudgets = async (req, res) => {
           totalSpent,
           remaining,
           percentageused: `${percentageused}%`,
-          spendingStatus: // <-- NEW FIELD NAME for the calculated status
-            remaining <= 0
-              ? "over budget 🚨"
-              : remaining < budget.amount * 0.1
-              ? "Almost reached ⛔️"
-              : "On track ✅",
+          spendingStatus: 
+          percentageused >= 100
+            ? "over budget 🚨"      
+            : percentageused >= 80
+            ? "Almost reached ⛔️"  
+            : "On track ✅",         
         };
       })
     );
