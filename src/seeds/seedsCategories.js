@@ -38,7 +38,7 @@ const categories = [
       { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/call.png' },
       { name: 'Food', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/food.png' },
       { name: 'POS Charges', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/pos-charges.png' },
-      { name: 'Transport', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' }
+      { name: 'Transport', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' },
     ]
   },
   {

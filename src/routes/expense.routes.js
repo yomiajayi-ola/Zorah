@@ -10,7 +10,8 @@ import {
     updateExpense,
     archiveExpense,
     restoreExpense,
-    deleteExpensePermanently
+    deleteExpensePermanently,
+    getSpendingOverview
 } from "../controllers/expenseController.js";
 
 const router = express.Router();
@@ -20,6 +21,7 @@ router.get("/get-expense", protect, getExpense);
 router.get("/summary", protect, getExpenseSummary);
 router.get("/daily", protect, getDailyExpenses);
 router.get("/monthly", protect, getMonthlyExpenses);
+router.get("/spending-overview", protect, getSpendingOverview);
 router.get("/:id", protect, getExpenseById);
 router.put("/:id", protect, updateExpense);
 router.patch("/:id/archive", protect, archiveExpense);

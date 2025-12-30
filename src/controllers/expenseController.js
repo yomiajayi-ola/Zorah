@@ -333,3 +333,83 @@ export const deleteExpensePermanently = async (req, res) => {
   }
 };
 
+// @desc Get Spending Overview for Charts (Daily, Weekly, Monthly)
+// @route GET /api/expenses/spending-overview?timeframe=weekly
+export const getSpendingOverview = async (req, res) => {
+  try {
+    const { timeframe = 'daily' } = req.query;
+    const userId = req.user._id;
+
+    let groupStage;
+    let sortStage = { "_id.year": 1, "_id.period": 1 };
+
+    // 1. Define grouping based on Figma chart logic
+    if (timeframe === 'daily') {
+        groupStage = {
+            day: { $dayOfMonth: "$date" },
+            month: { $month: "$date" },
+            year: { $year: "$date" }
+        };
+        sortStage = { "_id.year": 1, "_id.month": 1, "_id.day": 1 };
+    } else if (timeframe === 'weekly') {
+        groupStage = {
+            week: { $week: "$date" }, // Weeks 0-53
+            year: { $year: "$date" }
+        };
+    } else { // Monthly
+        groupStage = {
+            month: { $month: "$date" },
+            year: { $year: "$date" }
+        };
+    }
+
+    // 2. Aggregate spending data
+    const chartData = await Expense.aggregate([
+      { $match: { user: userId, status: "active" } },
+      {
+        $group: {
+          _id: groupStage,
+          totalAmount: { $sum: "$amount" }
+        }
+      },
+      { $sort: sortStage }
+    ]);
+
+    // 3. Calculate "Comparison to Last Month" Percentage (+7.1%)
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+
+    const stats = await Expense.aggregate([
+      { $match: { user: userId, status: "active" } },
+      {
+        $group: {
+          _id: { month: { $month: "$date" }, year: { $year: "$date" } },
+          monthlyTotal: { $sum: "$amount" }
+        }
+      }
+    ]);
+
+    const thisMonthTotal = stats.find(s => s._id.month === currentMonth && s._id.year === currentYear)?.monthlyTotal || 0;
+    const prevMonthTotal = stats.find(s => s._id.month === lastMonth && s._id.year === lastMonthYear)?.monthlyTotal || 0;
+
+    let diffPercent = 0;
+    if (prevMonthTotal > 0) {
+        diffPercent = ((thisMonthTotal - prevMonthTotal) / prevMonthTotal) * 100;
+    }
+
+    res.json({
+      timeframe,
+      comparison: {
+        percentage: diffPercent.toFixed(1),
+        isIncrease: diffPercent >= 0
+      },
+      chartData
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
