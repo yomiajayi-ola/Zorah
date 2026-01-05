@@ -1,6 +1,5 @@
-dotenv.config();
 import dotenv from "dotenv";
-
+dotenv.config();
 
 import express from "express";
 import path from 'path';
@@ -23,6 +22,7 @@ import kycRoutes from "./routes/kycRoutes.js";
 import aiRoutes from "./routes/ai.routes.js";
 import voiceRoutes from "./routes/voice.routes.js"
 import webhookRoutes from "./routes/webhook.routes.js"
+import billRoutes from "./routes/bills.routes.js";
 // import Config from "react-native-config";
 
 // Access variables like this:
@@ -78,6 +78,7 @@ app.use("/api/kyc", kycRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/voice", voiceRoutes);
 app.use("/api/webhooks", webhookRoutes);
+app.use("/api/bills", billRoutes);
 
 
 
