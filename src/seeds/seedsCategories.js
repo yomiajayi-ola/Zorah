@@ -18,7 +18,14 @@ const categories = [
       { name: 'Allowance', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/allowance.png' },
       { name: 'Bonus', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/bonus.png' },
       { name: 'Investment', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/investment.png' },
-      { name: 'Salary', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/salary.png' }
+      { name: 'Salary', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/salary.png' },
+      { name: 'Business Profit', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Business+Profit.png' },
+      { name: 'Freelance/Contract', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Freelance%3AContract.png' },
+      { name: 'Side Hustle', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Side+Hustle.png' },
+      { name: 'Gifts', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Gifts.png' },
+      { name: 'Refunds', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Refunds.png' },
+      { name: 'Rental Income', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Rental+Income.png' },
+      { name: 'Sale of item', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/sale.png' }
     ]
   },
   {
@@ -39,6 +46,26 @@ const categories = [
       { name: 'Food', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/food.png' },
       { name: 'POS Charges', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/pos-charges.png' },
       { name: 'Transport', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' },
+      { name: 'Restaurant', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/restaurant.png' },
+      { name: 'Dining', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/dining.png' },
+      { name: 'Rent/Mortgage', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/rent.png' },
+      { name: 'Electricity', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/electricity.png' },
+      { name: 'Water', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/water.png' },
+      { name: 'Gas', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/gas.png' },
+      { name: 'Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/repairs.png' },
+      
+      // Group: Communications & Tech
+      { name: 'Internet', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/internet.png' },
+      { name: 'Mobile Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/data.png' },
+      { name: 'Airtime/Calls', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/calls.png' },
+      { name: 'Cable TV', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/cable.png' },
+
+      // Group: Transportation
+      { name: 'Transport', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' },
+      { name: 'Fuel', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/fuel.png' },
+      { name: 'Car Maintenance', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/car.png' },
+      { name: 'Parking Fees', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/parking.png' },
+      { name: 'Ride-hailing', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/ride.png' }
     ]
   },
   {

@@ -1,9 +1,9 @@
 import cron from "node-cron";
 import Bill from "../models/Bills.js";
 import { createNotification } from "../services/notificationService.js";
-// import { sendEmail } from "../utils/emailService.js"; // Ensure this is imported for the HTML templating next
 
-// 1. Defined the named function so it can be exported
+import { sendBillEmail } from "../utils/emailService.js"; 
+
 export const checkBills = async () => {
   console.log("--- Starting Bill Check Logic ---");
   try {
@@ -14,14 +14,12 @@ export const checkBills = async () => {
     sevenDaysAway.setDate(today.getDate() + 7);
     sevenDaysAway.setHours(0, 0, 0, 0);
 
-    // Logic: Find bills due exactly 7 days from now
     const almostDue = await Bill.find({ 
       dueDate: sevenDaysAway, 
       status: "unpaid", 
       reminderEnabled: true 
-    }).populate("user"); // Populate user to get email/name
+    }).populate("user");
 
-    // Logic: Find unpaid bills where the date is older than today
     const overdue = await Bill.find({ 
       dueDate: { $lt: today }, 
       status: { $ne: "paid" } 
@@ -35,13 +33,16 @@ export const checkBills = async () => {
         title: "Bill Almost Due",
         message: `Your ${bill.name} of ₦${bill.amount} is due in 7 days.`
       });
-      console.log(`Notification sent for almost due bill: ${bill.name}`);
+      
+      // 2. TRIGGER THE EMAIL
+      await sendBillEmail(bill.user, bill, "bill_reminder"); 
+      console.log(`Email and Notification sent for: ${bill.name}`);
     }
 
     // Process Overdue
     for (const bill of overdue) {
       if (bill.status !== "overdue") {
-        bill.status = "overdue"; // Update DB state
+        bill.status = "overdue";
         await bill.save();
       }
       
@@ -51,7 +52,10 @@ export const checkBills = async () => {
         title: "Bill Overdue! 🚨",
         message: `Your ${bill.name} was due on ${bill.dueDate.toDateString()}.`
       });
-      console.log(`Status updated and alert sent for overdue bill: ${bill.name}`);
+
+      // 3. TRIGGER THE OVERDUE EMAIL
+      await sendBillEmail(bill.user, bill, "bill_overdue");
+      console.log(`Status updated and email sent for: ${bill.name}`);
     }
     
     return { almostDueCount: almostDue.length, overdueCount: overdue.length };
@@ -60,8 +64,3 @@ export const checkBills = async () => {
     throw error;
   }
 };
-
-// 2. Schedule the named function to run at 8:00 AM daily
-cron.schedule("0 8 * * *", () => {
-  checkBills();
-});

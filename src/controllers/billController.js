@@ -1,21 +1,30 @@
 import Bill from "../models/Bills.js";
 
 export const addBill = async (req, res) => {
-  try {
-    const { name, amount, dueDate, frequency, category } = req.body;
-    const bill = await Bill.create({
-      user: req.user._id,
-      name,
-      amount,
-      dueDate,
-      frequency,
-      category
-    });
-    res.status(201).json({ status: "success", data: bill });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+    try {
+      const { name, amount, dueDate, frequency, category, reminderEnabled } = req.body;
+      
+      let bill = await Bill.create({
+        user: req.user._id,
+        name,
+        amount,
+        dueDate,
+        frequency,
+        category,
+        reminderEnabled
+      });
+  
+      // 💡 SOUND ENGINEER TIP: Populate user so we have the email for the service
+      bill = await bill.populate("user", "fullName email");
+  
+      // Optional: Send a 'Bill Created' email or wait for the Cron Job
+      // await sendBillEmail(bill.user, bill, "bill_reminder");
+  
+      res.status(201).json({ status: "success", data: bill });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
 
 export const getBills = async (req, res) => {
     try {

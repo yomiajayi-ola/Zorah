@@ -2,8 +2,10 @@ import mongoose from 'mongoose';
 
 const subCategorySchema = new mongoose.Schema({
   name: { type: String, required: true },
-  image: { type: String, required: true }
-}, { _id: true }); // Each subcategory gets its own _id
+  image: { type: String, required: true },
+
+  group: { type: String, default: 'General' } 
+}, { _id: true });
 
 const categorySchema = new mongoose.Schema({
   name: { type: String, required: true },       // e.g., "Budget"
