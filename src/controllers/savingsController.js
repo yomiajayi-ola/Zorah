@@ -27,17 +27,15 @@ export const addContribution = async (req, res) => {
     const { goalId, amount } = req.body;
     const userId = req.user._id;
 
-    // A. Find the Goal
     const goal = await SavingsGoal.findOne({ _id: goalId, user: userId });
     if (!goal) return res.status(404).json({ message: "Goal not found" });
 
-    // B. Real-Time Balance Check (Optional but recommended)
-    // You can call your getWalletBalance function here to ensure 
-    // the user has enough money before even hitting the API.
+    // Generate a unique reference for THIS specific payment
+    // Example: savings_goalId_timestamp
+    const uniqueReference = `savings_${goal._id}_${Date.now()}`;
 
-    // C. Execute the Debit in Real-Time
-    // This calls Xpress Wallet API to actually move the money
-    await debitWallet(userId, amount, "savings_contribution", goal._id);
+    // Pass the UNIQUE reference to the wallet service
+    await debitWallet(userId, amount, "savings_contribution", uniqueReference);
 
     // D. Update the Goal amount locally
     goal.currentAmount += Number(amount);

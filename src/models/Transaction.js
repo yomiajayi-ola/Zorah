@@ -22,7 +22,7 @@ const transactionSchema = new mongoose.Schema({
   },
   reference: {
     type: String,
-    unique: true,
+    unique: false,
     sparse: true // This allows multiple documents to have a null reference
   },
   status: {
