@@ -59,6 +59,10 @@ export const getBills = async (req, res) => {
   export const updateBill = async (req, res) => {
     try {
       const { billId } = req.params;
+      
+      if (!req.body) {
+        return res.status(400).json({ message: "Request body is missing" });
+    }
   
       // Only allow fields that can be edited
       const allowedUpdates = [

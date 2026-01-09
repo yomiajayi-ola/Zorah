@@ -49,23 +49,23 @@ const categories = [
       { name: 'Restaurant', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/restaurant.png' },
       { name: 'Dining', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/dining.png' },
       { name: 'Rent/Mortgage', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/rent.png' },
-      { name: 'Electricity', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/electricity.png' },
-      { name: 'Water', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/water.png' },
-      { name: 'Gas', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/gas.png' },
-      { name: 'Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/repairs.png' },
+      { name: 'Electricity', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Electricity.png' },
+      { name: 'Water', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Water.png' },
+      { name: 'Gas', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Gas.png' },
+      { name: 'Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Repairs.png' },
       
       // Group: Communications & Tech
-      { name: 'Internet', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/internet.png' },
+      { name: 'Internet', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Internet.png' },
       { name: 'Mobile Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/data.png' },
-      { name: 'Airtime/Calls', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/calls.png' },
-      { name: 'Cable TV', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/cable.png' },
+      { name: 'Airtime/Calls', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
+      { name: 'Cable TV', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Cable+TV.png' },
 
       // Group: Transportation
       { name: 'Transport', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/transport.png' },
-      { name: 'Fuel', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/fuel.png' },
-      { name: 'Car Maintenance', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/car.png' },
-      { name: 'Parking Fees', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/parking.png' },
-      { name: 'Ride-hailing', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/ride.png' }
+      { name: 'Fuel', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Fuel.png' },
+      { name: 'Car Maintenance', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Car+Maintenance.png' },
+      { name: 'Parking Fees', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Parking+Fees.png' },
+      { name: 'Ride-hailing', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Ride-hailing.png' }
     ]
   },
   {
