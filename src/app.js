@@ -23,6 +23,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import voiceRoutes from "./routes/voice.routes.js"
 import webhookRoutes from "./routes/webhook.routes.js"
 import billRoutes from "./routes/bills.routes.js";
+import "./cron/billAlerts.js";
 // import Config from "react-native-config";
 
 // Access variables like this:

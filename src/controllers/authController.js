@@ -6,29 +6,36 @@ import { access } from "fs";
 import { sendEmail } from "../utils/sendEmail.js";
 
 
-// const generateToken = (id) => {
-//   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "30d" });
-// };
 
 // @desc Register new user
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, preferredReminderHour } = req.body;
 
     const userExists = await User.findOne({ email });
-    if (userExists)
-      return res.status(400).json({ message: "User already exists" });
+    if (userExists) return res.status(400).json({ message: "User already exists" });
 
-    const user = await User.create({ name, email, password });
-    const token = generateToken(user._id);
+    // 1. Create the user document
+    const user = await User.create({ 
+      name, 
+      email, 
+      password, 
+      preferredReminderHour 
+    });
+
+    // 2.  Use jwt method defined in schema
+    const token = user.getSignedJwtToken(); 
 
     res.status(201).json({
       _id: user._id,
       name: user.name,
       email: user.email,
-      token,a
+      preferredReminderHour: user.preferredReminderHour, 
+      token, // This should now work!
     });
   } catch (error) {
+    // If you see "user.getSignedJwtToken is not a function", 
+    // it means your Model file changes weren't saved or loaded.
     res.status(500).json({ message: error.message });
   }
 };

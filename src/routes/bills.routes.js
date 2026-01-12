@@ -16,11 +16,12 @@ router.patch("/bills/:billId", protect, updateBill);
 // This allows you to manually trigger the "7 days before" and "Overdue" logic
 router.get("/test-cron-logic", protect, async (req, res) => {
   try {
-    await checkBills(); // Manually execute the function that usually runs at 8 AM
-    res.json({ message: "Cron logic executed successfully. Check your notifications/email." });
+    // If you type ?hour=14 in Postman, it tests the 2 PM window
+    const testHour = req.query.hour ? parseInt(req.query.hour) : new Date().getHours();
+    await checkBills(testHour); 
+    res.json({ message: `Execution finished for hour: ${testHour}` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-
 export default router;
