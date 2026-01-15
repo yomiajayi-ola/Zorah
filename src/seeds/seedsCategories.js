@@ -15,9 +15,9 @@ const categories = [
     name: 'Income',
     type: 'income',
     subcategories: [
-      { name: 'Allowance', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Allowance.png' },
-      { name: 'Bonus', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Bonus%3ATips.png' },
-      { name: 'Salary', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Salary.png' },
+      { name: 'Allowance', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Allowance.png' },
+      { name: 'Bonus', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Bonus%3ATips.png' },
+      { name: 'Salary', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Salary.png' },
       { name: 'Business Profit', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Business+Profit.png' },
       { name: 'Freelance/Contract', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Freelance%3AContract.png' },
       { name: 'Gifts', group: 'Income', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/income/Gifts.png' },
