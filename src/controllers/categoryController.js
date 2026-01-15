@@ -24,3 +24,29 @@ export const getAllCategories = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// GET all subcategories across all types
+export const getAllSubcategories = async (req, res) => {
+  try {
+    // Aggregation to extract only subcategories
+    const categories = await Category.find({});
+    
+    // Flatten all subcategory arrays into one single list
+    const allSubcategories = categories.reduce((acc, cat) => {
+      const subsWithType = cat.subcategories.map(sub => ({
+        ...sub.toObject(),
+        parentType: cat.type, 
+        parentName: cat.name
+      }));
+      return acc.concat(subsWithType);
+    }, []);
+
+    res.status(200).json({ 
+      success: true, 
+      count: allSubcategories.length,
+      data: allSubcategories 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
