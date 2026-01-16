@@ -7,13 +7,23 @@ import mongoose from "mongoose";
 // @route   POST /api/expenses
 // @access  Private
 
-// In expenseController.js
+// Add Expense
 export const addExpense = async (req, res) => {
   try {
-    const { amount, category, date } = req.body;
-    // ... existing expense creation logic ...
+    const { amount, category, date, description, paymentMethod } = req.body;
 
-    // 1. Calculate Budget vs Actual (Real-time comparison)
+    // 1. Create and save the expense FIRST
+    const expense = new Expense({
+      user: req.user._id,
+      amount,
+      category,
+      date: date || new Date(),
+      description,
+      paymentMethod
+    });
+    await expense.save(); // Now it exists in the database
+
+    // 2. Look for an active budget for this category
     const budget = await Budget.findOne({
       user: req.user._id,
       category: category,
@@ -21,10 +31,11 @@ export const addExpense = async (req, res) => {
     });
 
     if (budget) {
+      // 3. Calculate total spent (now including the new expense)
       const totalSpent = await calculateTotalSpent(req.user._id, category, budget.startDate, budget.endDate);
       const percentUsed = (totalSpent / budget.amount) * 100;
 
-      // 2. Trigger Notification based on Figma logic (80% and 100%)
+      // 4. Alert Logic
       if (percentUsed >= 100) {
         await createNotification({
           userId: req.user._id,
@@ -32,8 +43,6 @@ export const addExpense = async (req, res) => {
           title: "Budget Exceeded! 🚨",
           message: `Your ${category} spending is now at ${percentUsed.toFixed(0)}%.`,
         });
-        // Optional: Emit websocket event for "Instant Red"
-        // io.to(req.user._id).emit('budget_alert', { category, status: 'over' });
       } else if (percentUsed >= 80) {
         await createNotification({
           userId: req.user._id,
@@ -45,7 +54,9 @@ export const addExpense = async (req, res) => {
     }
 
     res.status(201).json(expense);
-  } catch (error) { /* error handling */ }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // @desc Get All expenses for user 

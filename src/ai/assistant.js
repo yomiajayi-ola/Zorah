@@ -17,29 +17,21 @@ async function callGeminiWithRetry(ai, modelName, payload) {
     const maxRetries = 3;
     for (let i = 0; i < maxRetries; i++) {
         try {
-            console.log(`Attempting Gemini call (Attempt ${i + 1}/${maxRetries})...`);
-            
-            const response = await ai.getGenerativeModel({ model: modelName }).generateContent(payload);
-            
-            // Success check: If we get text, return it immediately
-            if (response.text) {
-                return response;
-            }
-            
-            // If response is empty, but we're not on the last attempt, log and retry
-            if (i < maxRetries - 1) {
-                console.warn(`Gemini call failed with empty text (Attempt ${i + 1}). Retrying...`);
-                await new Promise(resolve => setTimeout(resolve, 1500 * (i + 1))); // 1.5s, 3s delay
-                continue;
-            }
-
-            // If it's the last attempt and still no text, return the empty response for error handling
-            return response; 
-            
+            const model = ai.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(payload);
+            return result;
         } catch (error) {
-            console.error(`Gemini call failed due to network/API error (Attempt ${i + 1}):`, error.message);
-            if (i === maxRetries - 1) throw error; // Re-throw on last attempt
-            await new Promise(resolve => setTimeout(resolve, 1500 * (i + 1)));
+            // Check if it is a Rate Limit error
+            if (error.status === 429) {
+                console.warn(`Rate limit hit. Attempt ${i + 1}. Waiting 45 seconds...`);
+                // Wait much longer for 429s (free tier usually requires a minute)
+                await new Promise(resolve => setTimeout(resolve, 45000));
+                continue; 
+            }
+            
+            console.error(`Attempt ${i + 1} failed:`, error.message);
+            if (i === maxRetries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
         }
     }
 }
@@ -57,6 +49,8 @@ export const aiAssistant = async (req, res) => {
 
         // 2. Fetch DB info (Assuming data filtering has been implemented in processor.js)
         const financialData = await getFinancialData(intent, userId);
+
+        console.log("DEBUG: Data sent to Gemini ->", JSON.stringify(financialData, null, 2));
 
         // Payload definition with the CORRECT structure
 

@@ -5,40 +5,28 @@ import Income from "../models/Income.js";
 
 export async function getFinancialData(intent, userId) {
     let financialData = {};
-    const threeMonthsAgo = new Date();
-    // Calculate the date 3 months ago 
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-    // Filter criteria for time-series data
-    const dateFilter = { createdAt: { $gte: threeMonthsAgo } };
+    // 1. Fetch ALL Income (No date filter)
+    financialData.income = await Income.find({ user: userId })
+        .sort({ date: -1 });
 
-    if (intent === "spending-summary") {
-        // ✅ FIX: Only fetch the last 3 months of transactions, max 100
-        financialData.transactions = await Transactions.find({ 
-            user: userId,
-            ...dateFilter 
-        })
-        .sort({ createdAt: -1 }) // Get most recent first
+    // 2. Fetch ALL Budgets
+    financialData.budgets = await Budgets.find({ user: userId }); 
+
+    // 3. Fetch ALL Savings Goals
+    financialData.savings = await Savings.find({ user: userId });
+
+    // 4. Fetch ALL Transactions/Expenses (No date filter)
+    // Note: Use your actual Expense model if Transactions is different
+    financialData.transactions = await Transactions.find({ user: userId })
+        .sort({ date: -1 }) 
         .limit(100); 
-    }
 
-    if (intent === "budget-analysis") {
-        financialData.budgets = await Budgets.find({ user: userId }); 
-        // Note: Budgets are usually few, so no date filter needed unless they are time-series
-    }
-
-    if (intent === "savings-goal") {
-        financialData.savings = await Savings.find({ user: userId });
-    }
-
-    if (intent === "income-summary") {
-        // ✅ FIX: Filter income by date, max 50 records
-        financialData.income = await Income.find({ 
-            user: userId,
-            ...dateFilter 
-        })
-        .limit(50);
-    }
+    // Log what was found to your VS Code terminal
+    // console.log(`--- DEBUG DATA FOR USER ${userId} ---`);
+    // console.log(`Income found: ${financialData.income.length}`);
+    // console.log(`Expenses found: ${financialData.transactions.length}`);
+    // console.log(`Goals found: ${financialData.savings.length}`);
 
     return financialData;
 }
