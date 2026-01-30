@@ -59,7 +59,7 @@ userSchema.methods.matchPin = async function (enteredPin) {
 
 userSchema.methods.getSignedJwtToken = function() {
   return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-    expiresIn: '30d'
+    expiresIn: '1h'
   });
 };
 

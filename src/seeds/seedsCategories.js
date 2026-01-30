@@ -41,21 +41,25 @@ const categories = [
     type: 'expense',
     subcategories: [
       { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
+      { name: 'Health', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Health.png' },
+      { name: 'Skincare', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Skincare.png' },
+      { name: 'Giveaway', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Giveaway.png' },
+
       { name: 'Food', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Food.png' },
       { name: 'POS Charges', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/POS.png' },
-      { name: 'Restaurant', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Restaurant.png' },
-      { name: 'Dining', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Dining.png' },
+      { name: 'Hangout', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Restaurant.png' },
+      { name: 'Groceries', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Dining.png' },
       { name: 'Rent/Mortgage', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Rent%3AMortgage.png' },
       { name: 'Electricity', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Electricity.png' },
       { name: 'Water', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/water.png' },
       { name: 'Gas', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Gas.png' },
-      { name: 'Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Repairs.png' },
+      { name: 'Home Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Repairs.png' },
       
       // Group: Communications & Tech
       { name: 'Internet', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Internet.png' },
       { name: 'Mobile Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Mobile+Data.png' },
-      { name: 'Airtime/Calls', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
-      { name: 'Cable TV', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Cable+TV.png' },
+      { name: 'Airtime & Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
+      { name: 'Cable TV (DSTV, GOTV, etc', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Cable+TV.png' },
 
       // Group: Transportation
       { name: 'Transport', group: 'Transportation', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Transport.png' },
@@ -71,16 +75,16 @@ const categories = [
     subcategories: [
       { name: 'Car', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Car%3AVehicle.png' },
       { name: 'Education', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Education.pngg' },
-      { name: 'Home', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Home%3AReal+Estate.png' },
-      { name: 'Wedding/Marriage', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Wedding%3AMarriage.png' },
-      { name: 'Debt Payoff Goal', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Debt+Payoff+Goal.png' },
+      { name: 'Home / Rent', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Home%3AReal+Estate.png' },
+      { name: 'Wedding', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Wedding%3AMarriage.png' },
+      { name: 'Debt', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Debt+Payoff+Goal.png' },
       { name: 'Gadget', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Gadget.png' },
       { name: 'Retirement', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Retirement.png' },
       { name: 'Travel', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Travel%3AVacation.png' },
       { name: 'Investment', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Investment+Capital.png' },
       { name: 'Emergency Fund', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Emergency+Fund.png' },
       { name: 'Furniture', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Furniture.png' },
-      { name: 'Baby:Children', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Baby%3AChildren.png' }
+      { name: 'Baby Funds', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Baby%3AChildren.png' }
     ]
   }
 ];

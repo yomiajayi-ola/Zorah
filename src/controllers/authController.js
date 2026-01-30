@@ -10,20 +10,22 @@ import { sendEmail } from "../utils/sendEmail.js";
 // @desc Register new user
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, preferredReminderHour } = req.body;
+    //  BiometricEnabled added for destructuring
+    const { name, email, password, preferredReminderHour, biometricEnabled } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: "User already exists" });
 
-    // 1. Create the user document
+    // 1. Create the user document including the biometric preference
     const user = await User.create({ 
       name, 
       email, 
       password, 
-      preferredReminderHour 
+      preferredReminderHour,
+      biometricEnabled: biometricEnabled || false 
     });
 
-    // 2.  Use jwt method defined in schema
+    // 2. Jwt method defined in schema
     const token = user.getSignedJwtToken(); 
 
     res.status(201).json({
@@ -31,11 +33,10 @@ export const registerUser = async (req, res) => {
       name: user.name,
       email: user.email,
       preferredReminderHour: user.preferredReminderHour, 
-      token, // This should now work!
+      biometricEnabled: user.biometricEnabled,
+      token, 
     });
   } catch (error) {
-    // If you see "user.getSignedJwtToken is not a function", 
-    // it means your Model file changes weren't saved or loaded.
     res.status(500).json({ message: error.message });
   }
 };
