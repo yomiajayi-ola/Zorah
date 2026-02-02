@@ -21,17 +21,19 @@ async function callGeminiWithRetry(ai, modelName, payload) {
             const result = await model.generateContent(payload);
             return result;
         } catch (error) {
-            // Check if it is a Rate Limit error
+            // 💡 SOUND MOVE: If rate limited, don't wait 45s. 
+            // Throw a custom error to trigger an immediate response.
             if (error.status === 429) {
-                console.warn(`Rate limit hit. Attempt ${i + 1}. Waiting 45 seconds...`);
-                // Wait much longer for 429s (free tier usually requires a minute)
-                await new Promise(resolve => setTimeout(resolve, 45000));
-                continue; 
+                const rateLimitError = new Error("RATE_LIMIT_EXCEEDED");
+                rateLimitError.status = 429;
+                throw rateLimitError;
             }
             
             console.error(`Attempt ${i + 1} failed:`, error.message);
+            
+            // For other errors (network blips), do a short exponential backoff
             if (i === maxRetries - 1) throw error;
-            await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); 
         }
     }
 }
@@ -136,7 +138,16 @@ export const aiAssistant = async (req, res) => {
 
     } catch (err) {
         console.error("Gemini Assistant Error:", err);
-        // Returning details helps with debugging network/auth errors
+
+        // 💡 Check for the Rate Limit status we threw earlier
+        if (err.status === 429) {
+            return res.status(429).json({
+                status: "failed",
+                reply: "Eyaa, I'm a bit overwhelmed with requests right now. 😅 Please give me about a minute to rest and try asking again!",
+                intent: "rate-limit-hit"
+            });
+        }
+
         res.status(500).json({ error: "AI Assistant failed", details: err.message });
     }
 };
