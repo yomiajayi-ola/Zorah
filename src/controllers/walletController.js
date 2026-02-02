@@ -1,4 +1,6 @@
+import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
+import KYC from "../models/Kyc.js";
 import Transaction from "../models/Transaction.js";
 import { v4 as uuidv4 } from "uuid";
 import axios from "axios";
@@ -140,5 +142,64 @@ export const getFundingHistory = async (req, res) => {
       return res.json({ success: true, history });
   } catch (error) {
       res.status(500).json({ message: error.message });
+  }
+};
+
+export const getOverview = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Fetch data from local DB in parallel for speed
+    const [user, wallet, kyc, recentTransactions] = await Promise.all([
+      User.findById(userId).select("name email biometricEnabled KycStatus"),
+      Wallet.findOne({ user: userId }),
+      KYC.findOne({ user: userId }),
+      Transaction.find({ user: userId }).sort({ createdAt: -1 }).limit(5)
+    ]);
+
+    // 2. Fallback if wallet doesn't exist yet
+    if (!wallet) {
+      return res.status(200).json({
+        user: { name: user.name, kycStatus: user.KycStatus },
+        hasWallet: false,
+        message: "Complete KYC to activate your wallet."
+      });
+    }
+
+    // 3. Fetch LIVE Balance from Xpress Wallet (Source of Truth)
+    let liveBalance = 0;
+    try {
+      const balanceResponse = await axios.get(
+        `https://payment.xpress-wallet.com/api/v1/wallet/${wallet.xpressWalletId}/balance`,
+        {
+          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        }
+      );
+      liveBalance = balanceResponse.data.data.availableBalance;
+    } catch (apiErr) {
+      console.error("Xpress Wallet Balance Fetch Failed:", apiErr.message);
+      // Fallback to 0 or a locally cached balance if API is down
+    }
+
+    // 4. Consolidate for the Frontend
+    res.status(200).json({
+      success: true,
+      account: {
+        balance: liveBalance,
+        accountNumber: wallet.accountNumber,
+        accountName: wallet.accountName,
+        tier: kyc?.tier || 1
+      },
+      kyc: {
+        status: kyc?.walletStatus || "pending",
+        currentTier: kyc?.tier || 1
+      },
+      recentTransactions,
+      userSettings: {
+        biometricEnabled: user.biometricEnabled
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching overview", error: error.message });
   }
 };
