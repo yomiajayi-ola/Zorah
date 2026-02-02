@@ -101,7 +101,7 @@ export const aiAssistant = async (req, res) => {
 
 
         // 3. Generate response from Gemini using Retry Logic
-        const response = await callGeminiWithRetry(ai, "gemini-2.0-flash", payload);
+        const response = await callGeminiWithRetry(ai, "gemini-1.5-flash", payload);
 
         
         
