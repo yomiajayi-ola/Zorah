@@ -4,7 +4,7 @@ import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.use(protect);
+// router.use(protect);
 
 router.post("/deposit", protect, depositFunds);
 router.post("/withdraw", protect, withdrawFunds);
