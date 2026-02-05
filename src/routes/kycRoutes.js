@@ -29,13 +29,22 @@ router.post(
   submitKyc
 );
 
-router.post(
+router.patch(
   "/upgrade",
   protect,
-  upload.fields([
-    { name: "passportPhoto", maxCount: 1 },
-    { name: "utilityBill", maxCount: 1 },
-  ]),
+  (req, res, next) => {
+    upload.fields([
+      { name: "passportPhoto", maxCount: 1 },
+      { name: "utilityBill", maxCount: 1 },
+    ])(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ status: "error", message: `Multer Error: ${err.message}` });
+      } else if (err) {
+        return res.status(500).json({ status: "error", message: err.message });
+      }
+      next();
+    });
+  },
   upgradeKYC
 );
 // router.get("/status", protect, getKYCStatus);
