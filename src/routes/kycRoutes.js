@@ -1,6 +1,6 @@
 
 import express from "express";
-import { submitKyc } from "../controllers/kycController.js";
+import { submitKyc, upgradeKYC } from "../controllers/kycController.js";
 import { protect } from "../middlewares/auth.middleware.js";
 import { upload } from "../middlewares/upload.js";
 import multer from "multer";
@@ -29,15 +29,15 @@ router.post(
   submitKyc
 );
 
-// router.post(
-//   "/upgrade",
-//   protect,
-//   upload.fields([
-//     { name: "passportPhoto", maxCount: 1 },
-//     { name: "utilityBill", maxCount: 1 },
-//   ]),
-//   upgradeKYC
-// );
+router.post(
+  "/upgrade",
+  protect,
+  upload.fields([
+    { name: "passportPhoto", maxCount: 1 },
+    { name: "utilityBill", maxCount: 1 },
+  ]),
+  upgradeKYC
+);
 // router.get("/status", protect, getKYCStatus);
 
 export default router;
