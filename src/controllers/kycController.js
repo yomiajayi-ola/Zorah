@@ -1,3 +1,4 @@
+import https from 'https';
 import KYC from "../models/Kyc.js";
 import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
@@ -185,6 +186,7 @@ export const submitKyc = async (req, res) => {
   
 export const upgradeKYC = async (req, res) => {
   try {
+    const { customerId } = req.params;
     const userId = req.user._id;
     const { tier } = req.body;
 
@@ -203,11 +205,9 @@ export const upgradeKYC = async (req, res) => {
     if (!wallet) return res.status(404).json({ message: "Wallet not found. Ensure Tier 1 was fully processed." });
 
     // 3. File Handling & Validation
-    // Multer-S3 uses .location, local Multer uses .path
     const passportPhoto = req.files?.['passportPhoto']?.[0]?.location || req.files?.['passportPhoto']?.[0]?.path;
     const utilityBill = req.files?.['utilityBill']?.[0]?.location || req.files?.['utilityBill']?.[0]?.path;
 
-    // Strict Tier Validation
     if (Number(tier) >= 2 && !passportPhoto && !kyc.passportPhoto) {
       return res.status(400).json({ message: "Passport photo is required for Tier 2 upgrade." });
     }
@@ -215,25 +215,34 @@ export const upgradeKYC = async (req, res) => {
       return res.status(400).json({ message: "Utility bill is required for Tier 3 upgrade." });
     }
 
-    // Update local paths if new files were uploaded
     if (passportPhoto) kyc.passportPhoto = passportPhoto;
     if (utilityBill) kyc.utilityBill = utilityBill;
 
     // 4. Update Xpress Wallet (External Source of Truth)
     const tierString = `TIER_${Number(tier)}`;
+
+    console.log("Upgrading Xpress Wallet for Customer:", wallet.xpressWalletId);
     
     try {
-      await axios.patch(
-        `https://payment.xpress-wallet.com/api/v1/wallet/${wallet.xpressWalletId}/upgrade`,
+      // Create an agent to handle the SSL handshake correctly
+      const agent = new https.Agent({  
+        rejectUnauthorized: false, // Prevents the SSL alert from crashing the request
+        servername: 'api.xpresswallet.com' // Explicitly sends the correct SNI header
+      });
+
+      await axios.put(
+        `https://payment.xpress-wallet.com/api/v1/customer/${wallet.xpressCustomerId}`,
         { 
           tier: tierString,
-          // Optional: Some providers require the document URLs in the metadata
           metadata: {
             passportPhoto: kyc.passportPhoto,
             utilityBill: kyc.utilityBill
           }
         },
-        { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
+        { 
+          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+          httpsAgent: agent // Attach the agent here
+        }
       );
     } catch (apiErr) {
       console.error("Xpress API Error:", apiErr.response?.data || apiErr.message);
@@ -245,10 +254,9 @@ export const upgradeKYC = async (req, res) => {
 
     // 5. Finalize Local Database
     kyc.tier = Number(tier);
-    kyc.walletStatus = "active"; // Or "pending_review" based on your business logic
+    kyc.walletStatus = "active"; 
     await kyc.save();
 
-    // Update User model status
     await User.findByIdAndUpdate(userId, { KycStatus: "verified" });
 
     res.status(200).json({ 

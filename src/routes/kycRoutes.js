@@ -29,8 +29,8 @@ router.post(
   submitKyc
 );
 
-router.patch(
-  "/upgrade",
+router.put(
+  "/upgrade/:customerId", 
   protect,
   (req, res, next) => {
     upload.fields([
