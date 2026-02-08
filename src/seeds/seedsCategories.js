@@ -40,7 +40,7 @@ const categories = [
     name: 'Expense',
     type: 'expense',
     subcategories: [
-      { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/call.png' },
+      { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
       { name: 'Health', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Health.png' },
       { name: 'Skincare', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Skincare.png' },
       { name: 'Giveaway', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Giveaway.png' },
