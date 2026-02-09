@@ -1,7 +1,9 @@
+import Expense from "../models/Expense.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Transactions from "../models/Transaction.js";
 import { retryGeminiRequest } from "../utils/geminiRetry.js";
 import crypto from "crypto";
+import { checkBudgetAndNotify } from "../utils/budgetCheck.js";
 
 // 1. Function declaration Gemini can call
 const addExpenseDeclaration = {
@@ -92,27 +94,46 @@ export const voiceExpenseLogger = async (req, res) => {
           message: "Missing important details. Please say something like: 'I spent 1500 on food.'",
         });
       }
-  
-      // ... after extracting amount, category, description from AI
-      const newTransaction = await Transactions.create({
-        user: req.user.id,
+
+      const newExpense = await Expense.create({
+        user: req.user.id,        // Uses the ID from protect middleware
         amount: amount,
-        type: "debit", 
-        purpose: "other", 
-        // Generate a unique reference to satisfy the unique: true constraint
-        reference: `VOICE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`, 
-        status: "successful", 
-        metadata: { 
-          category, 
-          description 
-        } 
+        category: category,       
+        description: description, 
+        date: date || new Date(), 
+        paymentMethod: "Cash",    
+        status: "active"          
       });
+
+      // shared helper to trigger budget alerts
+      await checkBudgetAndNotify(req.user.id, category);
         
       return res.json({
         status: "success",
         message: `Logged ₦${amount} under ${category}.`,
-        transaction: newTransaction,
+        expense: newExpense,
       });
+  
+      // ... after extracting amount, category, description from AI
+      // const newTransaction = await Transactions.create({
+      //   user: req.user.id,
+      //   amount: amount,
+      //   type: "debit", 
+      //   purpose: "other", 
+      //   // Generate a unique reference to satisfy the unique: true constraint
+      //   reference: `VOICE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`, 
+      //   status: "successful", 
+      //   metadata: { 
+      //     category, 
+      //     description 
+      //   } 
+      // });
+        
+      // return res.json({
+      //   status: "success",
+      //   message: `Logged ₦${amount} under ${category}.`,
+      //   transaction: newTransaction,
+      // });
   
     } catch (err) {
       console.error("Voice Expense Logger Error:", err);
