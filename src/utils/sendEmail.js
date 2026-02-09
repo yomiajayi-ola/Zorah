@@ -1,19 +1,19 @@
 import nodemailer from "nodemailer";
 
 export const sendEmail = async (options) => {
-    // Force direct values if process.env fails for any reason
     const smtpConfig = {
         host: process.env.SMTP_HOST || "smtp.gmail.com", 
         port: Number(process.env.SMTP_PORT) || 465,
-        secure: false, // true for 465, false for other ports
+        secure: Number(process.env.SMTP_PORT) === 465 || true, 
         auth: {
             user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
+            pass: process.env.SMTP_PASS, 
         },
-        // Add this to help with some network restrictions
         tls: {
-            rejectUnauthorized: false
-        }
+            
+            rejectUnauthorized: false 
+        },
+        connectionTimeout: 10000, 
     };
 
     const transporter = nodemailer.createTransport(smtpConfig);

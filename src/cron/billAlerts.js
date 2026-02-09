@@ -46,17 +46,23 @@ export const checkBills = async (targetHour) => {
       billDate.setHours(0, 0, 0, 0);
 
       // 4. Logic for "Almost Due" (Exactly 7 days away)
-      if (billDate.getTime() === sevenDaysAway.getTime() && bill.status === "unpaid") {
-        console.log(`✅ MATCH FOUND: Sending 7-day reminder for ${bill.name} to ${bill.user.email}`);
-        
-        await createNotification({
-          userId: bill.user._id,
-          type: "bill_reminder",
-          title: "Bill Almost Due",
-          message: `Your ${bill.name} of ₦${bill.amount} is due in 7 days.`
-        });
-        
-        await sendBillEmail(bill.user, bill, "bill_reminder");
+      try {
+        if (billDate.getTime() === sevenDaysAway.getTime() && bill.status === "unpaid") {
+          console.log(`✅ MATCH FOUND: Sending 7-day reminder for ${bill.name} to ${bill.user.email}`);
+          
+          await createNotification({
+            userId: bill.user._id,
+            type: "bill_reminder",
+            title: "Bill Almost Due",
+            message: `Your ${bill.name} of ₦${bill.amount} is due in 7 days.`
+          });
+          
+          await sendBillEmail(bill.user, bill, "bill_reminder").catch(e => 
+            console.error(`📧 Email failed for ${bill.user.email}:`, e.message)
+        );
+        }
+      } catch (innerError) {
+        console.error(`Error processing bill ${bill._id}:`, innerError);
       }
 
       // 5. Logic for "Overdue" (Due date is in the past)
