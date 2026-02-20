@@ -1,3 +1,4 @@
+import https from 'https';
 import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
 import KYC from "../models/Kyc.js";
@@ -103,18 +104,110 @@ export const withdrawFunds = async (req, res) => {
 // /controllers/walletController.js
 export const getWalletBalance = async (req, res) => {
   try {
-      const transactions = await Transaction.find({ 
-          user: req.user.id, 
-          status: "successful" 
+    const wallet = await Wallet.findOne({ user: req.user.id });
+    
+    // Fetch directly from Xpress to get that ₦2,000 you see in the dashboard
+    const response = await axios.get(
+      `https://payment.xpress-wallet.com/api/v1/wallet/${wallet.customerId}/balance`,
+      { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
+    );
+
+    const liveBalance = response.data.data.availableBalance;
+    
+    // Update your local wallet balance field so it's not always 0
+    wallet.balance = liveBalance;
+    await wallet.save();
+
+    return res.json({ success: true, balance: liveBalance });
+  } catch (error) {
+    res.status(500).json({ message: "Could not fetch live balance" });
+  }
+};
+
+export const transferToCustomer = async (req, res) => {
+  try {
+    const { amount, toCustomerId, purpose } = req.body;
+    const fromUserId = req.user.id; // Use id from auth middleware
+
+    // 1. Fetch Sender's Wallet Details
+    const fromWallet = await Wallet.findOne({ user: fromUserId });
+    if (!fromWallet) {
+      return res.status(404).json({ message: "Sender wallet not found." });
+    }
+
+    // 2. Fetch Recipient's Wallet Details (To update them locally later)
+    const toWallet = await Wallet.findOne({ xpressCustomerId: toCustomerId });
+    if (!toWallet) {
+      return res.status(404).json({ message: "Recipient wallet not found in Zorah records." });
+    }
+
+    // 3. Local Balance Check
+    if (fromWallet.balance < Number(amount)) {
+      return res.status(400).json({ message: "Insufficient funds in your Zorah wallet." });
+    }
+
+    // 4. Xpress Wallet API Call
+    const agent = new https.Agent({ rejectUnauthorized: false });
+    const xpressResponse = await axios.post(
+      'https://payment.xpress-wallet.com/api/v1/transfer/wallet',
+      {
+        amount: Number(amount),
+        fromCustomerId: fromWallet.xpressCustomerId,
+        toCustomerId: toCustomerId 
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        httpsAgent: agent
+      }
+    );
+
+    if (xpressResponse.data.status) {
+      const transferData = xpressResponse.data.data;
+      const transferAmount = Number(amount);
+
+      // 5. UPDATE SENDER: Debit balance and record transaction
+      fromWallet.balance -= transferAmount;
+      await fromWallet.save();
+
+      await Transaction.create({
+        user: fromUserId,
+        type: 'debit',
+        amount: transferAmount,
+        purpose: purpose || 'transfer',
+        reference: transferData.reference,
+        status: 'successful',
+        metadata: xpressResponse.data
       });
 
-      const balance = transactions.reduce((acc, curr) => {
-          return curr.type === 'credit' ? acc + curr.amount : acc - curr.amount;
-      }, 0);
+      // 6. UPDATE RECIPIENT: Credit balance and record transaction
+      toWallet.balance += transferAmount;
+      await toWallet.save();
 
-      return res.json({ success: true, balance });
+      await Transaction.create({
+        user: toWallet.user,
+        type: 'credit',
+        amount: transferAmount,
+        purpose: 'transfer', // Changed from 'transfer_received' to 'transfer' to match your enum
+        reference: `${transferData.reference}-REC`,
+        status: 'successful',
+        metadata: { senderName: fromWallet.accountName }
+      });
+
+      console.log(`✅ Transfer Successful: ${fromWallet.accountName} -> ${toWallet.accountName}`);
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully transferred ₦${transferAmount} to ${toWallet.accountName}`,
+        reference: transferData.reference
+      });
+    }
+
   } catch (error) {
-      res.status(500).json({ message: error.message });
+    console.error("Transfer Error:", error.response?.data || error.message);
+    res.status(500).json({ 
+      message: "Transfer failed", 
+      error: error.response?.data?.message || error.message 
+    });
   }
 };
 
@@ -149,7 +242,7 @@ export const getOverview = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // 1. Fetch data from local DB in parallel for speed
+    // 1. Fetch all local data in parallel
     const [user, wallet, kyc, recentTransactions] = await Promise.all([
       User.findById(userId).select("name email biometricEnabled KycStatus"),
       Wallet.findOne({ user: userId }),
@@ -157,49 +250,43 @@ export const getOverview = async (req, res) => {
       Transaction.find({ user: userId }).sort({ createdAt: -1 }).limit(5)
     ]);
 
-    // 2. Fallback if wallet doesn't exist yet
+    // 2. Handle cases where the wallet hasn't been created yet
     if (!wallet) {
-      return res.status(200).json({
-        user: { name: user.name, kycStatus: user.KycStatus },
-        hasWallet: false,
-        message: "Complete KYC to activate your wallet."
+      return res.status(200).json({ 
+        success: true,
+        hasWallet: false, 
+        message: "Complete KYC to activate your wallet." 
       });
     }
 
-    // 3. Fetch LIVE Balance from Xpress Wallet (Source of Truth)
-    let liveBalance = 0;
-    try {
-      const balanceResponse = await axios.get(
-        `https://payment.xpress-wallet.com/api/v1/wallet/${wallet.xpressWalletId}/balance`,
-        {
-          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
-        }
-      );
-      liveBalance = balanceResponse.data.data.availableBalance;
-    } catch (apiErr) {
-      console.error("Xpress Wallet Balance Fetch Failed:", apiErr.message);
-      // Fallback to 0 or a locally cached balance if API is down
-    }
-
-    // 4. Consolidate for the Frontend
+    // 3. Return the data directly from your MongoDB
+    // The balance here will reflect the 1200 you see in your logs
     res.status(200).json({
       success: true,
       account: {
-        balance: liveBalance,
+        balance: wallet.balance, // Reading directly from your DB
+        currency: wallet.currency || "NGN",
         accountNumber: wallet.accountNumber,
         accountName: wallet.accountName,
-        tier: kyc?.tier || 1
+        tier: kyc?.tier || 1,
+        xpressCustomerId: wallet.xpressCustomerId,
+        xpressWalletId: wallet.xpressWalletId
       },
       kyc: {
         status: kyc?.walletStatus || "pending",
         currentTier: kyc?.tier || 1
       },
-      recentTransactions,
-      userSettings: {
-        biometricEnabled: user.biometricEnabled
+      recentTransactions, // These will show the 'successful' status after your webhook test
+      userSettings: { 
+        biometricEnabled: user?.biometricEnabled || false
       }
     });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching overview", error: error.message });
+    console.error("Overview Fetch Error:", error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "Error fetching overview", 
+      error: error.message 
+    });
   }
 };

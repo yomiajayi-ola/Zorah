@@ -34,8 +34,14 @@ console.log("Firebase Initialized", admin.apps.length)
 
 const app = express();
 
+app.use('/api/webhooks/xpress', express.raw({ type: 'application/json' }), (req, res, next) => {
+  req.rawBody = req.body; 
+  next();
+});
+
 // Middleware
 app.use(express.json( { strict: true }));
+
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ message: "Invalid JSON format in request body" });
@@ -55,14 +61,17 @@ app.use(cors());
 //   }
 // }));
 
-app.use(express.json({
-  verify: (req, res, buf) => {
-    // Check if the request is going to the webhook path
-    if (req.originalUrl.startsWith('/api/webhooks')) {
-      req.rawBody = buf; // Store the raw buffer for signature verification
-    }
-  }
-}));
+// app.use(express.json({
+//   verify: (req, res, buf) => {
+//     // Check if the request is going to the webhook path
+//     if (req.originalUrl.startsWith('/api/webhooks')) {
+//       req.rawBody = buf; // Store the raw buffer for signature verification
+//     }
+//   }
+// }));
+
+
+
 
 // Routes
 app.use("/api/auth", authRoutes);

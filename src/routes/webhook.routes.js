@@ -1,8 +1,8 @@
 import express from "express";
-import { handleWebhook } from "../controllers/webHookController.js";
+import { xpressWebhook } from "../controllers/webHookController.js";
 
 const router = express.Router();
 
-router.post("/xpress-wallet", handleWebhook);
+router.post('/xpress', xpressWebhook);
 
 export default router;

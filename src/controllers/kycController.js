@@ -126,7 +126,7 @@ export const submitKyc = async (req, res) => {
     await Wallet.create({
       user: req.user.id,
       xpressCustomerId: walletResponse.data.customer.id,
-      xpressWalletId: walletResponse.data.wallet.walletId,
+      xpressWalletId: xpressWalletData.id,
       accountNumber: walletResponse.data.wallet.accountNumber,
       accountName: walletResponse.data.wallet.accountName
     });
@@ -190,85 +190,94 @@ export const upgradeKYC = async (req, res) => {
     const userId = req.user._id;
     const { tier } = req.body;
 
-    // 1. Validate Tier Input
-    if (![2, 3].includes(Number(tier))) {
-      return res.status(400).json({ message: "Invalid tier selected. Choose 2 or 3." });
+    const requestedTier = Number(tier);
+
+    if (![2, 3].includes(requestedTier)) {
+      return res.status(400).json({
+        message: "Invalid tier selected. Choose 2 or 3."
+      });
     }
 
-    // 2. Fetch Records
     const [kyc, wallet] = await Promise.all([
       KYC.findOne({ user: userId }),
       Wallet.findOne({ user: userId })
     ]);
 
-    if (!kyc) return res.status(404).json({ message: "KYC record not found. Please complete Tier 1 first." });
-    if (!wallet) return res.status(404).json({ message: "Wallet not found. Ensure Tier 1 was fully processed." });
-
-    // 3. File Handling & Validation
-    const passportPhoto = req.files?.['passportPhoto']?.[0]?.location || req.files?.['passportPhoto']?.[0]?.path;
-    const utilityBill = req.files?.['utilityBill']?.[0]?.location || req.files?.['utilityBill']?.[0]?.path;
-
-    if (Number(tier) >= 2 && !passportPhoto && !kyc.passportPhoto) {
-      return res.status(400).json({ message: "Passport photo is required for Tier 2 upgrade." });
+    if (!kyc || !wallet) {
+      return res.status(404).json({
+        message: "KYC or Wallet record missing."
+      });
     }
-    if (Number(tier) === 3 && !utilityBill && !kyc.utilityBill) {
-      return res.status(400).json({ message: "Utility bill is required for Tier 3 upgrade." });
+
+    // Optional: prevent downgrade
+    if (requestedTier <= kyc.tier) {
+      return res.status(400).json({
+        message: "Invalid tier upgrade."
+      });
     }
+
+    // Handle file uploads
+    const passportPhoto =
+      req.files?.['passportPhoto']?.[0]?.location ||
+      req.files?.['passportPhoto']?.[0]?.path;
+
+    const utilityBill =
+      req.files?.['utilityBill']?.[0]?.location ||
+      req.files?.['utilityBill']?.[0]?.path;
 
     if (passportPhoto) kyc.passportPhoto = passportPhoto;
     if (utilityBill) kyc.utilityBill = utilityBill;
 
-    // 4. Update Xpress Wallet (External Source of Truth)
-    const tierString = `TIER_${Number(tier)}`;
+    // Update external wallet
+    const tierString = `TIER_${requestedTier}`;
 
-    console.log("Upgrading Xpress Wallet for Customer:", wallet.xpressWalletId);
-    
-    try {
-      // Create an agent to handle the SSL handshake correctly
-      const agent = new https.Agent({  
-        rejectUnauthorized: false, // Prevents the SSL alert from crashing the request
-        servername: 'api.xpresswallet.com' // Explicitly sends the correct SNI header
-      });
-
-      await axios.put(
-        `https://payment.xpress-wallet.com/api/v1/customer/${wallet.xpressCustomerId}`,
-        { 
-          tier: tierString,
-          metadata: {
-            passportPhoto: kyc.passportPhoto,
-            utilityBill: kyc.utilityBill
-          }
-        },
-        { 
-          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
-          httpsAgent: agent // Attach the agent here
+    await axios.put(
+      `https://payment.xpress-wallet.com/api/v1/customer/${customerId}`,
+      {
+        tier: tierString,
+        metadata: {
+          passportPhoto: kyc.passportPhoto,
+          utilityBill: kyc.utilityBill
         }
-      );
-    } catch (apiErr) {
-      console.error("Xpress API Error:", apiErr.response?.data || apiErr.message);
-      return res.status(400).json({ 
-        message: "Xpress Wallet rejected the upgrade.", 
-        details: apiErr.response?.data?.message || apiErr.message 
-      });
-    }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`
+        }
+      }
+    );
 
-    // 5. Finalize Local Database
-    kyc.tier = Number(tier);
-    kyc.walletStatus = "active"; 
+    // Update KYC
+    kyc.tier = requestedTier;
+    kyc.walletStatus = "active";
     await kyc.save();
 
-    await User.findByIdAndUpdate(userId, { KycStatus: "verified" });
+    // Update Wallet
+    wallet.tier = requestedTier;
+    wallet.status = "active";
+    wallet.updatedAt = new Date();
+    await wallet.save();
 
-    res.status(200).json({ 
-      message: `Successfully upgraded to Tier ${tier}`, 
-      kyc 
+    // Update User
+    await User.findByIdAndUpdate(userId, {
+      KycStatus: "verified"
+    });
+
+    return res.status(200).json({
+      message: `Successfully upgraded to Tier ${requestedTier}`,
+      kyc,
+      wallet
     });
 
   } catch (error) {
-    console.error("Internal Upgrade Error:", error);
-    res.status(500).json({ message: "Server error during upgrade", error: error.message });
+    console.error("Upgrade Error:", error);
+    return res.status(500).json({
+      message: "Internal Error",
+      error: error.message
+    });
   }
 };
+
 
   export const getKYCStatus = async (req, res) => {
     try {
