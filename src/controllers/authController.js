@@ -8,30 +8,43 @@ import { sendEmail } from "../utils/sendEmail.js";
 
 
 // @desc Register new user
+// @desc Register new user
 export const registerUser = async (req, res) => {
   try {
-    //  BiometricEnabled added for destructuring
-    const { name, email, password, preferredReminderHour, biometricEnabled } = req.body;
+    // 1. Destructure the NEW fields from req.body
+    const { 
+      firstName, 
+      lastName, 
+      email, 
+      phoneNumber, 
+      password, 
+      preferredReminderHour, 
+      biometricEnabled 
+    } = req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: "User already exists" });
 
-    // 1. Create the user document including the biometric preference
+    // 2. Pass those variables into User.create
     const user = await User.create({ 
-      name, 
+      firstName, 
+      lastName, 
       email, 
+      phoneNumber,
       password, 
       preferredReminderHour,
       biometricEnabled: biometricEnabled || false 
     });
 
-    // 2. Jwt method defined in schema
     const token = user.getSignedJwtToken(); 
 
     res.status(201).json({
       _id: user._id,
-      name: user.name,
+      firstName: user.firstName, 
+      lastName: user.lastName,
+      fullName: user.fullName,   
       email: user.email,
+      phoneNumber: user.phoneNumber,
       preferredReminderHour: user.preferredReminderHour, 
       biometricEnabled: user.biometricEnabled,
       token, 

@@ -3,11 +3,20 @@ import bcrypt from "bcryptjs";
 import jwt from 'jsonwebtoken';
 
 const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, unique: true, required: true },
+  // Split name into First and Last for a more personalized experience
+  firstName: { type: String, required: true, trim: true },
+  lastName: { type: String, required: true, trim: true },
+  
+  email: { type: String, unique: true, required: true, lowercase: true },
+  
+  // Added phoneNumber for WhatsApp/SMS notifications
+  phoneNumber: { type: String, unique: true, sparse: true }, 
+  
   password: { type: String },
   pin: { type: String },
   biometricEnabled: { type: Boolean, default: false },
+  
+  // Existing fields for OTP and KYC
   otp: { type: String },
   otpExpires: { type: Date },
   resetPasswordToken: String,
@@ -20,32 +29,44 @@ const userSchema = new mongoose.Schema({
 
   preferredReminderHour: { 
     type: Number, 
-    default: 8, // This ensures your static 8 AM system stays the default
+    default: 8, 
     min: 0, 
     max: 23 
   },
 
   googleId: { type: String },
-
   refreshToken: { type: String },
-
   authProvider: {
     type: String,
     enum: ["local", "google"],
     default: "local",
   },
 
+  // FCM Tokens for the push notifications we set up earlier
+  fcmTokens: [{ type: String }], 
+
 }, { timestamps: true });
 
-userSchema.pre("save", async function(next) {
-  // 1. New Check: If the user's authentication provider is NOT "local", skip password hashing entirely.
-  if (this.authProvider !== "local") return next();
+// Virtual for getting the full name easily
+userSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
 
-  // 2. Existing Checks: Only hash if the password field was modified AND it's not null/empty.
+userSchema.pre("save", async function(next) {
+  if (this.authProvider !== "local") return next();
   if (!this.isModified("password") || !this.password) return next();
   
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// Added a helper for the PIN as well
+userSchema.pre("save", async function(next) {
+  if (!this.isModified("pin") || !this.pin) return next();
+  
+  const salt = await bcrypt.genSalt(10);
+  this.pin = await bcrypt.hash(this.pin, salt);
   next();
 });
 
