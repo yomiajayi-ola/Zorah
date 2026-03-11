@@ -1,23 +1,58 @@
 import Budget from "../models/Budget.js";
 import Expense from "../models/Expense.js";
+import User  from "../models/User.js"
+
 
 // @desc create or update a budget 
 export const setBudget = async (req, res) => {
   try {
     const { category, amount, period, startDate, endDate } = req.body;
+    const userId = req.user._id;
+
+    // 1. FETCH THE USER (This fixes the "not defined" error)
+    const user = await User.findById(userId); 
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const start = new Date(startDate);
-    const month = start.getMonth() + 1; // 1-12
+    const month = start.getMonth() + 1;
     const year = start.getFullYear();
 
+    // 2. RUN LIMIT LOGIC
+    if (!user.walletId) {
+      const activeBudgetCount = await Budget.countDocuments({ 
+        user: userId, 
+        status: "active" 
+      });
+      
+      // Look for ANY budget with this category, regardless of month/year
+      const existingBudgetForCategory = await Budget.findOne({ 
+        user: userId, 
+        category: category, 
+        status: "active" 
+      });
+    
+      // BLOCK if they have at least 1 budget AND this is a brand new category
+      if (activeBudgetCount >= 1 && !existingBudgetForCategory) {
+          return res.status(403).json({
+              status: "failed",
+              hasReachedLimit: true,
+              message: "Free users are limited to 1 active budget category."
+          });
+      }
+    }
+
+
+    // 1. Initialize the variable
     let budget = await Budget.findOne({
-      user: req.user._id,
+      user: userId,
       category,
       month,
-      year
+      year,
+      status: "active" // Only look for active ones
     });
 
     if (budget) {
+      // Update existing
       budget.amount = amount;
       budget.period = period || budget.period;
       budget.startDate = startDate || budget.startDate;
@@ -27,19 +62,23 @@ export const setBudget = async (req, res) => {
       return res.json({ message: "Budget updated successfully", budget });
     }
 
+    // 2. Create new if not found
     budget = await Budget.create({
-      user: req.user._id,
+      user: userId,
       category,
       amount,
       period,
       startDate,
       endDate,
-      month,   // ✅ make sure month/year are saved
+      month,
       year
     });
 
+    // 3. This is where "budget" must be defined
     res.status(201).json({ message: "Budget created successfully", budget });
+    
   } catch (error) {
+    // If 'budget' was used inside the catch or incorrectly above, it throws the error you saw
     res.status(500).json({ message: error.message });
   }
 };

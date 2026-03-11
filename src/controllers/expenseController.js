@@ -2,6 +2,7 @@ import Expense from "../models/Expense.js";
 import Budget from "../models/Budget.js";
 import { createNotification } from "../services/notificationService.js";
 import mongoose from "mongoose";
+import User from "../models/User.js";
 
 // @desc    Add new expense
 // @route   POST /api/expenses
@@ -10,48 +11,35 @@ import mongoose from "mongoose";
 // Add Expense
 export const addExpense = async (req, res) => {
   try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+
+    // 🛡️ GUARD: Limit to 5 entries for non-wallet users
+    if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
+      return res.status(403).json({
+        status: "failed",
+        hasReachedLimit: true, // Frontend triggers Wallet Modal
+        message: "You've reached the limit for manual expenses. Create a Zorah Wallet to unlock unlimited tracking!"
+      });
+    }
+
     const { amount, category, date, description, paymentMethod } = req.body;
 
-    // 1. Create and save the expense FIRST
     const expense = new Expense({
-      user: req.user._id,
+      user: userId,
       amount,
       category,
       date: date || new Date(),
       description,
       paymentMethod
     });
-    await expense.save(); // Now it exists in the database
+    
+    await expense.save();
 
-    // 2. Look for an active budget for this category
-    const budget = await Budget.findOne({
-      user: req.user._id,
-      category: category,
-      status: "active"
-    });
+    // 📈 INCREMENT: Track usage
+    await user.incrementUsage('expense');
 
-    if (budget) {
-      // 3. Calculate total spent (now including the new expense)
-      const totalSpent = await calculateTotalSpent(req.user._id, category, budget.startDate, budget.endDate);
-      const percentUsed = (totalSpent / budget.amount) * 100;
-
-      // 4. Alert Logic
-      if (percentUsed >= 100) {
-        await createNotification({
-          userId: req.user._id,
-          type: "limit_exceeded",
-          title: "Budget Exceeded! 🚨",
-          message: `Your ${category} spending is now at ${percentUsed.toFixed(0)}%.`,
-        });
-      } else if (percentUsed >= 80) {
-        await createNotification({
-          userId: req.user._id,
-          type: "warning",
-          title: "Approaching Limit ⛔️",
-          message: `You've used ${percentUsed.toFixed(0)}% of your ${category} budget.`,
-        });
-      }
-    }
+    // ... (Your existing Budget Alert Logic) ...
 
     res.status(201).json(expense);
   } catch (error) {

@@ -1,5 +1,6 @@
 import SavingsGoal from "../models/SavingsGoal.js";
 import { debitWallet } from "../services/walletService.js"
+import User from "../models/User.js";
 
 // @desc Create savings goal
 export const createGoal = async (req, res) => {
@@ -24,8 +25,19 @@ export const createGoal = async (req, res) => {
 // /controllers/savingsController.js
 export const addContribution = async (req, res) => {
   try {
-    const { goalId, amount } = req.body;
     const userId = req.user._id;
+    const user = await User.findById(userId);
+
+    // 🛡️ GUARD: Action is locked for non-wallet users
+    if (!user.walletId) {
+        return res.status(403).json({
+            status: "failed",
+            isActionLocked: true, // Specific flag for goals
+            message: "Funding goals is a premium feature. Create a Zorah Wallet to start saving!"
+        });
+    }
+    const { goalId, amount } = req.body;
+    // const userId = req.user._id;
 
     const goal = await SavingsGoal.findOne({ _id: goalId, user: userId });
     if (!goal) return res.status(404).json({ message: "Goal not found" });
@@ -65,12 +77,20 @@ export const addContribution = async (req, res) => {
 
 // @desc Get all user goals
 export const getGoals = async (req, res) => {
-    try {
-        const goals = await SavingsGoal.find({ user: req.user._id });
-        res.json(goals);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+      const userId = req.user._id;
+      const user = await User.findById(userId);
+      const goals = await SavingsGoal.find({ user: userId });
+
+      // Add a 'locked' flag to the response
+      res.json({
+          status: "success",
+          isActionLocked: !user.walletId, // Tells UI to gray out 'Add Money' buttons
+          data: goals
+      });
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
 }
 
 export const getGoalById = async (req, res) => {
