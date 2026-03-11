@@ -4,6 +4,7 @@ import Transactions from "../models/Transaction.js";
 import { retryGeminiRequest } from "../utils/geminiRetry.js";
 import crypto from "crypto";
 import { checkBudgetAndNotify } from "../utils/budgetCheck.js";
+import User from "../models/User.js";
 
 // 1. Function declaration Gemini can call
 const addExpenseDeclaration = {
@@ -22,124 +23,38 @@ const addExpenseDeclaration = {
 };
 
 export const voiceExpenseLogger = async (req, res) => {
-    try {
-      const userInput = req.body.message;
-      if (!userInput) {
-        return res.status(400).json({ error: "Message is required" });
-      }
-  
-      const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      
-      // Define contents with explicit instruction for the model
-      const contents = [
-          { role: "user", parts: [{ text: `You are a financial logger. Your SOLE task is to extract the amount, category, and description from the user's expense statement and call the 'add_expense_to_db' function. Expense statement: ${userInput}` }] },
-      ];
-  
-      let result;
-      try {
-        result = await retryGeminiRequest(async () => {
-          return await ai
-            .getGenerativeModel({ model: "gemini-2.5-flash" })
-            .generateContent({
-              contents: contents,
-              tools: [{ functionDeclarations: [addExpenseDeclaration] }],
+  try {
+    const userInput = req.body.message;
+    const userId = req.user.id || req.user._id;
 
-              // ✅ FIX 1: generationConfig for temperature (for model tuning)
-              generationConfig: { 
-                  temperature: 0.0, 
-              },
+    if (!userInput) return res.status(400).json({ error: "Message is required" });
 
-              // ✅ FIX 2: toolConfig for function calling mode (for tool use)
-              toolConfig: {
-                  functionCallingConfig: {
-                      mode: 'ANY', // Forces the model to use the defined function
-                      allowedFunctionNames: ['add_expense_to_db'],
-                  },
-              },
-            });
-        });
-      } catch (err) {
-        // ... (Error handling remains the same)
-        if (err.status === 503) {
-          return res.status(503).json({
+    // 🛡️ 1. FETCH & GUARD
+    const user = await User.findById(userId);
+    if (!user.walletId && (user.usageMetrics.expensesLoggedCount >= 5 || user.usageMetrics.isFeatureLocked)) {
+        return res.status(403).json({ // <--- THE 'RETURN' IS VITAL
             status: "failed",
-            message: "Service is busy right now, try again in a few seconds.",
-          });
-        }
-        // If we catch the 400 Bad Request error here, log it explicitly
-        if (err.status === 400) {
-            console.error("Critical API Structure Error in Voice Logger:", err.message);
-        }
-        throw err;
-      }
-  
-      // ... after getting the result
-      const response = result.response;
-      const candidate = response.candidates?.[0];
-      const functionCallPart = candidate?.content?.parts?.find(p => p.functionCall);
-
-      // Check if a function call exists in the response parts
-      if (!functionCallPart) {
-        return res.status(422).json({
-          status: "failed",
-          message: "I couldn’t understand that clearly. Try something like: 'I spent 2500 on transport.'",
+            hasReachedLimit: true,
+            message: "Limit reached. Create a Zorah Wallet to continue."
         });
-      }
-
-      // Extract the arguments from the function call part
-      const { amount, category, description, date } = functionCallPart.functionCall.args || {};
-      if (!amount || !category || !description) {
-        return res.status(422).json({
-          status: "failed",
-          message: "Missing important details. Please say something like: 'I spent 1500 on food.'",
-        });
-      }
-
-      const newExpense = await Expense.create({
-        user: req.user.id,        // Uses the ID from protect middleware
-        amount: amount,
-        category: category,       
-        description: description, 
-        date: date || new Date(), 
-        paymentMethod: "Cash",    
-        status: "active"          
-      });
-
-      // shared helper to trigger budget alerts
-      await checkBudgetAndNotify(req.user.id, category);
-        
-      return res.json({
-        status: "success",
-        message: `Logged ₦${amount} under ${category}.`,
-        expense: newExpense,
-      });
-  
-      // ... after extracting amount, category, description from AI
-      // const newTransaction = await Transactions.create({
-      //   user: req.user.id,
-      //   amount: amount,
-      //   type: "debit", 
-      //   purpose: "other", 
-      //   // Generate a unique reference to satisfy the unique: true constraint
-      //   reference: `VOICE-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`, 
-      //   status: "successful", 
-      //   metadata: { 
-      //     category, 
-      //     description 
-      //   } 
-      // });
-        
-      // return res.json({
-      //   status: "success",
-      //   message: `Logged ₦${amount} under ${category}.`,
-      //   transaction: newTransaction,
-      // });
-  
-    } catch (err) {
-      console.error("Voice Expense Logger Error:", err);
-      return res.status(500).json({
-        status: "error",
-        message: "Unable to log expense at the moment.",
-      });
     }
-  };
+
+    // --- IF THE CODE REACHES HERE, IT PROCEEDS TO AI ---
+    const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    
+    // ... rest of your Gemini code ...
+
+    // At the very end, after creating the expense:
+    await user.incrementUsage('expense');
+      
+    return res.json({
+      status: "success",
+      message: `Logged ₦${amount} under ${category}.`,
+      expense: newExpense,
+    });
+
+  } catch (err) {
+    console.error("Voice Expense Logger Error:", err);
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+}

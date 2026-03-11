@@ -110,12 +110,19 @@ userSchema.methods.getSignedJwtToken = function() {
 
 // Method to check and increment usage
 userSchema.methods.incrementUsage = async function(type) {
-  if (this.walletId) return false; // No limits for wallet users
+  if (this.walletId) return false;
 
-  if (type === 'ai') this.usageMetrics.aiSessionsCount += 1;
-  if (type === 'expense') this.usageMetrics.expensesLoggedCount += 1;
+  if (type === 'ai') {
+      this.usageMetrics.aiSessionsCount += 1;
+  } 
+  else if (type === 'expense') {
+      this.usageMetrics.expensesLoggedCount += 1;
+  }
 
-  // Logic: If they've interacted 2+ times, lock the feature
+  // Force Mongoose to see the nested change
+  this.markModified('usageMetrics');
+
+  // Logic: If they hit the limit, lock it
   if (this.usageMetrics.aiSessionsCount >= 2 || this.usageMetrics.expensesLoggedCount >= 5) {
       this.usageMetrics.isFeatureLocked = true;
   }
