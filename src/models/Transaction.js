@@ -30,6 +30,20 @@ const transactionSchema = new mongoose.Schema({
     enum: ["pending", "successful", "failed"],
     default: "pending"
   },
+  category: { 
+    type: String, 
+    default: "uncategorized" 
+  },
+  merchantName: {
+     type: String 
+    }, 
+  originalNarration: { 
+    type: String 
+  },
+  isOneTime: {
+     type: Boolean, 
+     default: false 
+    }, 
   metadata: Object
 }, { timestamps: true });
 

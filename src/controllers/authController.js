@@ -282,3 +282,63 @@ export const refreshAccessToken = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+//  GET User Profile (Includes Usage Flags)
+export const getUserProfile = async (req, res) => {
+  try {
+      const user = await User.findById(req.user._id)
+          .select("-password"); // Never send password back
+
+      res.status(200).json({
+          status: "success",
+          data: user
+      });
+  } catch (error) {
+      res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+export const updateOnboardingProfile = async (req, res) => {
+  try {
+      const userId = req.user._id;
+      const { incomeSource, incomeRange, financialGoals } = req.body;
+
+      // Validation: Ensure at least one goal is selected
+      if (!financialGoals || !Array.isArray(financialGoals) || financialGoals.length === 0) {
+          return res.status(400).json({
+              status: "failed",
+              message: "Please select at least one financial goal to continue."
+          });
+      }
+
+      const updatedUser = await User.findByIdAndUpdate(
+          userId,
+          {
+              $set: {
+                  "onboarding.incomeSource": incomeSource,
+                  "onboarding.incomeRange": incomeRange,
+                  "onboarding.financialGoals": financialGoals,
+                  "onboarding.hasCompletedOnboarding": true
+              }
+          },
+          { new: true, runValidators: true }
+      );
+
+      if (!updatedUser) {
+          return res.status(404).json({ status: "failed", message: "User not found" });
+      }
+
+      return res.status(200).json({
+          status: "success",
+          message: "Onboarding profile updated successfully",
+          data: updatedUser.onboarding
+      });
+
+  } catch (error) {
+      console.error("[PROFILE_UPDATE_ERROR]:", error);
+      return res.status(500).json({
+          status: "error",
+          message: "Internal server error during profile update."
+      });
+  }
+};

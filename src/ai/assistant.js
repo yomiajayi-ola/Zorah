@@ -10,7 +10,7 @@ import {
 import { detectIntent } from "./intent.js";
 import { getFinancialData } from "./processor.js";
 import { systemPrompt } from "./prompt.js";
-
+import User from "../models/User.js"; // Required for usage tracking
 
 // 🔄 Retry Logic Wrapper for Gemini API calls
 async function callGeminiWithRetry(ai, modelName, payload) {
@@ -21,8 +21,6 @@ async function callGeminiWithRetry(ai, modelName, payload) {
             const result = await model.generateContent(payload);
             return result;
         } catch (error) {
-            // 💡 SOUND MOVE: If rate limited, don't wait 45s. 
-            // Throw a custom error to trigger an immediate response.
             if (error.status === 429) {
                 const rateLimitError = new Error("RATE_LIMIT_EXCEEDED");
                 rateLimitError.status = 429;
@@ -30,92 +28,70 @@ async function callGeminiWithRetry(ai, modelName, payload) {
             }
             
             console.error(`Attempt ${i + 1} failed:`, error.message);
-            
-            // For other errors (network blips), do a short exponential backoff
             if (i === maxRetries - 1) throw error;
             await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); 
         }
     }
 }
 
-
 export const aiAssistant = async (req, res) => {
     try {
+        const userId = req.user.id;
+        const { message } = req.body;
+
+        // 🛡️ 1. USAGE GUARD: Check limits before calling Gemini (Saves money/tokens)
+        const user = await User.findById(userId);
+        if (!user.walletId && user.usageMetrics.isFeatureLocked) {
+            return res.status(403).json({
+                status: "failed",
+                hasReachedLimit: true, // Frontend uses this to trigger Wallet Modal
+                reply: "You've reached your free AI limit. Create a Zorah Wallet to unlock unlimited access!",
+                intent: "limit-reached"
+            });
+        }
+
         const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        const { message } = req.body;
-        const userId = req.user.id;
-        
-        // 1. Detect user intent
+        // 2. Detect intent & fetch data
         const intent = detectIntent(message);
-
-        // 2. Fetch DB info (Assuming data filtering has been implemented in processor.js)
         const financialData = await getFinancialData(intent, userId);
 
         console.log("DEBUG: Data sent to Gemini ->", JSON.stringify(financialData, null, 2));
 
-        // Payload definition with the CORRECT structure
-
         const payload = {
             systemInstruction: {
                 role: "system",
-                parts: [
-                    { text: systemPrompt }
-                ]
+                parts: [{ text: systemPrompt }]
             },
-        
             contents: [
                 {
                     role: "user",
-                    parts: [
-                        {
-                            text: `User asked: "${message}"
-        User financial data: ${JSON.stringify(financialData)}`
-                        }
-                    ]
+                    parts: [{
+                        text: `User asked: "${message}"\nUser financial data: ${JSON.stringify(financialData)}`
+                    }]
                 }
             ],
-        
             generationConfig: {
                 temperature: 0.1,
                 topP: 1,
                 maxOutputTokens: 500,
             },
-        
             safetySettings: [
-                {
-                    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-                    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                },
-                {
-                    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                    threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-                }
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH }
             ]
         };
-        
 
-
-        // 3. Generate response from Gemini using Retry Logic
+        // 3. Generate response
         const response = await callGeminiWithRetry(ai, "gemini-2.0-flash", payload);
 
-        
-        
-        // 🚨 Robust response handling
         let replyText = response?.response?.text() || "";
         let responseStatus = "success";
         let finishReason = response.candidates?.[0]?.finishReason || "UNKNOWN";
         
-        // 1. Check if the final response text was empty
         if (!replyText) {
-            
-            // 2. Construct the failure message
             responseStatus = "failed";
-            
             if (finishReason === "SAFETY") {
                 replyText = `I apologize, but the response was blocked by safety filters. Please try rephrasing your request.`;
             } else if (finishReason === "MAX_TOKENS") {
@@ -123,13 +99,15 @@ export const aiAssistant = async (req, res) => {
             } else {
                 replyText = `I ran into an internal issue while generating the analysis (${finishReason}). Please try again shortly.`;
             }
-            
             console.warn("Final Gemini Response Failure:", finishReason, response.candidates);
-        
         }
-        
-        
-        // ✅ Final Return
+
+        // 📈 4. INCREMENT USAGE: Only if the session was successful
+        if (responseStatus === "success" && replyText) {
+            await user.incrementUsage('ai'); 
+            console.log(`[USAGE_TRACKER] AI session +1 for ${userId}. Current Count: ${user.usageMetrics.aiSessionsCount}`);
+        }
+
         return res.json({
             status: responseStatus,
             reply: replyText,
@@ -139,7 +117,6 @@ export const aiAssistant = async (req, res) => {
     } catch (err) {
         console.error("Gemini Assistant Error:", err);
 
-        // 💡 Check for the Rate Limit status we threw earlier
         if (err.status === 429) {
             return res.status(429).json({
                 status: "failed",

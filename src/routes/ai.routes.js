@@ -1,6 +1,7 @@
 import express from "express";
 import { aiAssistant } from "../ai/assistant.js";
 import { protect } from "../middlewares/auth.middleware.js";
+// import { usageGuard } from "../middlewares/usageGuard.js"
 import { getSmartBudgetTips } from "../ai/budgetTips.js";
 
 const router = express.Router();
