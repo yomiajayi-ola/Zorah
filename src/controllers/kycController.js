@@ -9,34 +9,36 @@ export const submitKyc = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // 1. Initial Check
-    const existing = await KYC.findOne({ user: userId });
-    if (existing) {
-      return res.status(400).json({ message: "KYC already submitted or under review" });
+    // 1. Fetch the existing User data from the database
+    const userRecord = await User.findById(userId);
+    if (!userRecord) return res.status(404).json({ message: "User not found" });
+
+    // 2. Check if KYC already exists
+    const existingKyc = await KYC.findOne({ user: userId });
+    if (existingKyc) {
+      return res.status(400).json({ message: "Wallet already created for this user" });
     }
 
-    const { tier, fullName, dateOfBirth, phoneNumber, address, bvn, nin } = req.body;
-    // ... validation logic (tier, missing fields, etc.) ...
+    // 3. Get ONLY the extra info from the request body (NIN, BVN, etc.)
+    const { tier, dateOfBirth, phoneNumber, address, bvn, nin } = req.body;
 
-    // 2. Prepare Data (But don't save to DB yet!)
-    const nameParts = fullName.trim().split(/\s+/);
-    const firstName = nameParts[0];
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : nameParts[0];
-    const tierString = `TIER_${Number(tier)}`;
-
+    // 4. Construct the Xpress Payload using DB values for Names and Email
     const walletPayload = {
-      firstName,
-      lastName,
-      phoneNumber,
+      firstName: userRecord.firstName, // 👈 Picked from Signup data
+      lastName: userRecord.lastName,   // 👈 Picked from Signup data
+      email: userRecord.email,         // 👈 Picked from Signup data
+      phoneNumber: phoneNumber || userRecord.phoneNumber, 
       bvn,
-      nin,
       address,
       dateOfBirth,
-      tier: tierString,
+      accountPrefix: "11",
+      metadata: {
+        nin: nin,
+        userId: userId
+      }
     };
 
-    // 3. Call External API FIRST
-    // If this fails, the 'catch' block will handle it and NO records will be created in your DB
+    // 5. Call Xpress API
     const walletResponse = await axios.post(
       "https://payment.xpress-wallet.com/api/v1/wallet",
       walletPayload,
@@ -48,144 +50,114 @@ export const submitKyc = async (req, res) => {
       }
     );
 
-    const xpressWalletData = walletResponse.data.wallet;
-    const walletId = xpressWalletData?.accountNumber;
-    const status = xpressWalletData?.status;
+    // ✅ FIX: Define both variables from the response data
+    const xpressWallet = walletResponse.data.wallet;
+    const xpressCustomer = walletResponse.data.customer; 
 
-    // 4. SAVE TO DATABASE ONLY AFTER SUCCESS
-    // Since we are here, the API call succeeded. Now we persist the data.
+    // 6. Save KYC record
     const kyc = await KYC.create({
       user: userId,
       tier: Number(tier),
-      fullName,
+      fullName: `${userRecord.firstName} ${userRecord.lastName}`,
       dateOfBirth,
       phoneNumber,
       address,
       bvn,
       nin,
-      passportPhoto: req.files?.['passportPhoto'] ? req.files['passportPhoto'][0].location : null,
-      utilityBill: req.files?.['utilityBill'] ? req.files['utilityBill'][0].buffer : null,
-      walletId,
-      walletStatus: status
+      status: "approved" 
     });
+    
+    console.log("--- ATTEMPTING WALLET CREATION ---");
+    console.log("User ID:", userId);
+    console.log("Customer ID:", xpressCustomer?.id);
+    console.log("Account Number:", xpressWallet?.accountNumber);
 
-    await User.findByIdAndUpdate(userId, { walletId });
-
-    await Wallet.create({
+    // 2. Create Wallet record
+    const wallet = await Wallet.create({
       user: userId,
       name: "Zorah Wallet",
       accountType: "bank",
-      xpressCustomerId: walletResponse.data.customer.id,
-      xpressWalletId: xpressWalletData.id,
-      accountNumber: walletId,
-      accountName: xpressWalletData.accountName,
+      xpressCustomerId: xpressCustomer?.id || xpressWallet?.customerId, 
+      xpressWalletId: xpressWallet?.id,
+      accountNumber: xpressWallet?.accountNumber,
+      accountName: xpressWallet?.accountName,
+      balance: 0, // Ensure balance starts at 0
       tier: Number(tier),
-      status: "active"
+      isDefault: true
+    });
+    
+    // 3. Update User for global reference
+    await User.findByIdAndUpdate(userId, { 
+        walletId: xpressWallet.accountNumber,
+        KycStatus: "verified" 
     });
 
     return res.status(201).json({
-      message: `KYC submitted successfully for Tier ${tier}. Wallet created.`,
-      data: { kyc, walletId, status },
+      message: "Wallet created successfully using profile data!",
+      accountNumber: xpressWallet.accountNumber
     });
-  } catch (error) {
-    // 5. Handle "Customer Already Exists"
-    const errorMessage = error.response?.data?.message || error.message;
-    console.error("KYC Error:", errorMessage);
 
-    // If Xpress says they exist, but you don't have a record, 
-    // you might want to handle that specifically here.
-    return res.status(400).json({
-      message: errorMessage,
-    });
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.message;
+    return res.status(400).json({ message: errorMessage });
   }
 };
-
-
-
-// export const upgradeKYC = async (req, res) => {
-//     try {
-//       const userId = req.user._id;
-//       const { tier } = req.body;
-  
-//       if (![2, 3].includes(Number(tier))) {
-//         return res.status(400).json({ message: "Invalid tier selected" });
-//       }
-  
-//       const kyc = await KYC.findOne({ user: userId });
-//       if (!kyc) return res.status(404).json({ message: "KYC record not found" });
-  
-//       // Handle uploads (passport, utility bill)
-//       if (req.files?.passportPhoto) {
-//         kyc.passportPhoto = req.files.passportPhoto[0].path;
-//       }
-  
-//       if (req.files?.utilityBill) {
-//         kyc.utilityBill = req.files.utilityBill[0].path;
-//       }
-  
-//       kyc.tier = tier;
-//       await kyc.save();
-  
-//       res.status(200).json({ message: `Upgraded to Tier ${tier}`, kyc });
-//     } catch (error) {
-//       res.status(500).json({ message: "Error upgrading KYC", error: error.message });
-//     }
-//   };
   
 export const upgradeKYC = async (req, res) => {
   try {
-    const { customerId } = req.params;
     const userId = req.user._id;
     const { tier } = req.body;
-
     const requestedTier = Number(tier);
 
+    // 1. Validate Tier Input
     if (![2, 3].includes(requestedTier)) {
-      return res.status(400).json({
-        message: "Invalid tier selected. Choose 2 or 3."
-      });
+      return res.status(400).json({ message: "Invalid tier. Choose 2 or 3." });
     }
 
+    // 2. Fetch both records to get the Xpress Customer ID
     const [kyc, wallet] = await Promise.all([
       KYC.findOne({ user: userId }),
       Wallet.findOne({ user: userId })
     ]);
 
     if (!kyc || !wallet) {
-      return res.status(404).json({
-        message: "KYC or Wallet record missing."
-      });
+      return res.status(404).json({ message: "KYC or Wallet record missing." });
     }
 
-    // Optional: prevent downgrade
+    // Prevent re-submitting current tier or downgrading
     if (requestedTier <= kyc.tier) {
-      return res.status(400).json({
-        message: "Invalid tier upgrade."
+      return res.status(400).json({ 
+        message: `You are already at Tier ${kyc.tier}. Please select a higher tier to upgrade.` 
       });
     }
 
-    // Handle file uploads
-    const passportPhoto =
-      req.files?.['passportPhoto']?.[0]?.location ||
-      req.files?.['passportPhoto']?.[0]?.path;
+    // 3. Handle File Uploads (Using the location from your multer-s3 setup)
+    const passportPhoto = req.files?.['passportPhoto']?.[0]?.location;
+    const utilityBill = req.files?.['utilityBill']?.[0]?.location;
 
-    const utilityBill =
-      req.files?.['utilityBill']?.[0]?.location ||
-      req.files?.['utilityBill']?.[0]?.path;
+    // 1. Tier 2 Requirement: Passport Photo
+    if (requestedTier === 2) {
+        if (!passportPhoto) {
+            return res.status(400).json({ message: "Passport photo is required for Tier 2 upgrade." });
+        }
+    }
 
-    if (passportPhoto) kyc.passportPhoto = passportPhoto;
-    if (utilityBill) kyc.utilityBill = utilityBill;
+    // 2. Tier 3 Requirement: Utility Bill ONLY
+    if (requestedTier === 3) {
+        if (!utilityBill) {
+            return res.status(400).json({ message: "Utility bill is required for Tier 3 (Address Verification)." });
+        }
+    }
 
-    // Update external wallet
     const tierString = `TIER_${requestedTier}`;
-
+    
     await axios.put(
-      `https://payment.xpress-wallet.com/api/v1/customer/${customerId}`,
+      `https://payment.xpress-wallet.com/api/v1/customer/${wallet.xpressCustomerId}`,
       {
         tier: tierString,
         metadata: {
-          passportPhoto: kyc.passportPhoto,
-          utilityBill: kyc.utilityBill
+          passportUrl: passportPhoto,
+          billUrl: utilityBill
         }
       },
       {
@@ -195,34 +167,30 @@ export const upgradeKYC = async (req, res) => {
       }
     );
 
-    // Update KYC
+    // 5. Update our Internal Database (Keep everything in sync)
     kyc.tier = requestedTier;
-    kyc.walletStatus = "active";
+    kyc.passportPhoto = passportPhoto;
+    kyc.utilityBill = utilityBill;
+    kyc.status = "pending"; // Usually goes to pending for manual review
     await kyc.save();
 
-    // Update Wallet
     wallet.tier = requestedTier;
-    wallet.status = "active";
-    wallet.updatedAt = new Date();
     await wallet.save();
 
-    // Update User
-    await User.findByIdAndUpdate(userId, {
-      KycStatus: "verified"
-    });
+    
+
+    // 6. Update User verification status
+    await User.findByIdAndUpdate(userId, { KycStatus: "pending" });
 
     return res.status(200).json({
-      message: `Successfully upgraded to Tier ${requestedTier}`,
-      kyc,
-      wallet
+      message: `Upgrade to Tier ${requestedTier} submitted successfully.`,
+      kyc
     });
 
   } catch (error) {
-    console.error("Upgrade Error:", error);
-    return res.status(500).json({
-      message: "Internal Error",
-      error: error.message
-    });
+    const errorMessage = error.response?.data?.message || error.message;
+    console.error("Upgrade Error:", errorMessage);
+    return res.status(error.response?.status || 500).json({ message: errorMessage });
   }
 };
 
