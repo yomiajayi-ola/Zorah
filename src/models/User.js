@@ -27,23 +27,22 @@ const userSchema = new mongoose.Schema({
     default: "unverified",
   },
 
-  // Add these to your UserSchema in models/User.js
   onboarding: {
     incomeSource: { 
-        type: String, 
-        enum: ["Salary/Employment", "Business/Self-employed", "Freelancing", "Multiple Sources", "Student/No Income"] 
+        type: [String], 
+        default: [] 
     },
     incomeRange: { 
         type: String, 
+        // Keep the enum if you want to restrict the range options
         enum: ["Below ₦50,000", "₦50,000 - ₦100,000", "₦100,000 - ₦200,000", "₦200,000 - ₦500,000", "Above ₦500,000", "Prefer not to say"] 
     },
     financialGoals: [{ 
-        type: String // e.g., ["Build Emergency Fund", "Save for Rent"]
+        type: String 
     }],
     hasCompletedOnboarding: { type: Boolean, default: false }
   },
 
-  // Add to UserSchema
   usageMetrics: {
     aiSessionsCount: { type: Number, default: 0 },
     expensesLoggedCount: { type: Number, default: 0 },
@@ -66,12 +65,12 @@ const userSchema = new mongoose.Schema({
     default: "local",
   },
 
-  // FCM Tokens for the push notifications we set up earlier
+  // FCM Tokens for the push notifications 
   fcmTokens: [{ type: String }], 
 
 }, { timestamps: true });
 
-// Virtual for getting the full name easily
+// Virtual for getting the full name 
 userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
@@ -85,7 +84,7 @@ userSchema.pre("save", async function(next) {
   next();
 });
 
-// Added a helper for the PIN as well
+// Helper for the PIN as well
 userSchema.pre("save", async function(next) {
   if (!this.isModified("pin") || !this.pin) return next();
   

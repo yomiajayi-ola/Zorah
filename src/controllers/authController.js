@@ -297,30 +297,38 @@ export const getUserProfile = async (req, res) => {
       res.status(500).json({ status: "error", message: error.message });
   }
 };
-
 export const updateOnboardingProfile = async (req, res) => {
   try {
       const userId = req.user._id;
+      // Destructure fields from body
       const { incomeSource, incomeRange, financialGoals } = req.body;
 
-      // Validation: Ensure at least one goal is selected
-      if (!financialGoals || !Array.isArray(financialGoals) || financialGoals.length === 0) {
-          return res.status(400).json({
-              status: "failed",
-              message: "Please select at least one financial goal to continue."
-          });
+      // 1. Prepare the update object
+      const updateData = {};
+
+      // 2. Handle incomeSource (Now an Array per new design)
+      if (incomeSource) {
+          // If frontend sends a single string, convert to array; otherwise use as is
+          updateData["onboarding.incomeSource"] = Array.isArray(incomeSource) 
+              ? incomeSource 
+              : [incomeSource];
       }
+
+      // 3. Optional Fields - Only update if provided
+      if (incomeRange) {
+          updateData["onboarding.incomeRange"] = incomeRange;
+      }
+
+      if (financialGoals && Array.isArray(financialGoals)) {
+          updateData["onboarding.financialGoals"] = financialGoals;
+      }
+
+      // 4. Mark onboarding as completed regardless of which optional fields were filled
+      updateData["onboarding.hasCompletedOnboarding"] = true;
 
       const updatedUser = await User.findByIdAndUpdate(
           userId,
-          {
-              $set: {
-                  "onboarding.incomeSource": incomeSource,
-                  "onboarding.incomeRange": incomeRange,
-                  "onboarding.financialGoals": financialGoals,
-                  "onboarding.hasCompletedOnboarding": true
-              }
-          },
+          { $set: updateData },
           { new: true, runValidators: true }
       );
 
