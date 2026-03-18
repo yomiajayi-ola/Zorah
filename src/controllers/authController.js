@@ -299,54 +299,49 @@ export const getUserProfile = async (req, res) => {
 };
 export const updateOnboardingProfile = async (req, res) => {
   try {
-      const userId = req.user._id;
-      // Destructure fields from body
-      const { incomeSource, incomeRange, financialGoals } = req.body;
+    const userId = req.user._id;
+    const { step, data } = req.body; // step: "goals", "income", etc.
 
-      // 1. Prepare the update object
-      const updateData = {};
+    const updateObject = {};
+    
+    // 1. Map the incoming step to the correct database field
+    if (step === "goals") {
+      updateObject["onboarding.financialGoals"] = data.financialGoals;
+    } else if (step === "income") {
+      updateObject["onboarding.incomeSource"] = Array.isArray(data.incomeSource) ? data.incomeSource : [data.incomeSource];
+      updateObject["onboarding.incomeRange"] = data.incomeRange;
+    } 
+    // ... add logic for kyc, integration, biometrics ...
 
-      // 2. Handle incomeSource (Now an Array per new design)
-      if (incomeSource) {
-          // If frontend sends a single string, convert to array; otherwise use as is
-          updateData["onboarding.incomeSource"] = Array.isArray(incomeSource) 
-              ? incomeSource 
-              : [incomeSource];
+    // 2. Add the step to completed list and move to next step
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        $set: updateObject,
+        $addToSet: { "onboarding.stepsCompleted": step }, // Prevents duplicates
+      },
+      { new: true }
+    );
+
+    // 3. Check if all 5 steps are done to set final flag
+    if (updatedUser.onboarding.stepsCompleted.length >= 5) {
+        updatedUser.onboarding.hasCompletedOnboarding = true;
+        updatedUser.onboarding.currentStep = "completed";
+        await updatedUser.save();
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: `Step ${step} saved.`,
+      // Return the flags the frontend needs
+      onboardingState: {
+          stepsCompleted: updatedUser.onboarding.stepsCompleted,
+          nextStep: updatedUser.onboarding.currentStep,
+          isFullyComplete: updatedUser.onboarding.hasCompletedOnboarding
       }
-
-      // 3. Optional Fields - Only update if provided
-      if (incomeRange) {
-          updateData["onboarding.incomeRange"] = incomeRange;
-      }
-
-      if (financialGoals && Array.isArray(financialGoals)) {
-          updateData["onboarding.financialGoals"] = financialGoals;
-      }
-
-      // 4. Mark onboarding as completed regardless of which optional fields were filled
-      updateData["onboarding.hasCompletedOnboarding"] = true;
-
-      const updatedUser = await User.findByIdAndUpdate(
-          userId,
-          { $set: updateData },
-          { new: true, runValidators: true }
-      );
-
-      if (!updatedUser) {
-          return res.status(404).json({ status: "failed", message: "User not found" });
-      }
-
-      return res.status(200).json({
-          status: "success",
-          message: "Onboarding profile updated successfully",
-          data: updatedUser.onboarding
-      });
+    });
 
   } catch (error) {
-      console.error("[PROFILE_UPDATE_ERROR]:", error);
-      return res.status(500).json({
-          status: "error",
-          message: "Internal server error during profile update."
-      });
+    return res.status(500).json({ message: error.message });
   }
 };

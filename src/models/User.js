@@ -28,18 +28,22 @@ const userSchema = new mongoose.Schema({
   },
 
   onboarding: {
-    incomeSource: { 
-        type: [String], 
-        default: [] 
-    },
-    incomeRange: { 
+    // Existing fields...
+    incomeSource: { type: [String], default: [] },
+    incomeRange: { type: String },
+    financialGoals: [{ type: String }],
+    
+    // State Tracking Fields
+    currentStep: { 
         type: String, 
-        // Keep the enum if you want to restrict the range options
-        enum: ["Below ₦50,000", "₦50,000 - ₦100,000", "₦100,000 - ₦200,000", "₦200,000 - ₦500,000", "Above ₦500,000", "Prefer not to say"] 
+        enum: ["goals", "income", "kyc", "integration", "biometrics", "completed"],
+        default: "goals" 
     },
-    financialGoals: [{ 
-        type: String 
-    }],
+    // Check "if user has finished Step X?"
+    stepsCompleted: {
+        type: [String],
+        default: [] // e.g., ["goals", "income"]
+    },
     hasCompletedOnboarding: { type: Boolean, default: false }
   },
 
