@@ -284,64 +284,99 @@ export const refreshAccessToken = async (req, res) => {
 };
 
 //  GET User Profile (Includes Usage Flags)
-export const getUserProfile = async (req, res) => {
-  try {
-      const user = await User.findById(req.user._id)
-          .select("-password"); // Never send password back
-
-      res.status(200).json({
-          status: "success",
-          data: user
-      });
-  } catch (error) {
-      res.status(500).json({ status: "error", message: error.message });
-  }
-};
 export const updateOnboardingProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { step, data } = req.body; // step: "goals", "income", etc.
+    const { step, data } = req.body; 
+
+    // 1. Validation: Ensure step is provided
+    if (!step) {
+      return res.status(400).json({ status: "failed", message: "Step identifier is required." });
+    }
 
     const updateObject = {};
     
-    // 1. Map the incoming step to the correct database field
-    if (step === "goals") {
-      updateObject["onboarding.financialGoals"] = data.financialGoals;
-    } else if (step === "income") {
-      updateObject["onboarding.incomeSource"] = Array.isArray(data.incomeSource) ? data.incomeSource : [data.incomeSource];
-      updateObject["onboarding.incomeRange"] = data.incomeRange;
-    } 
-    // ... add logic for kyc, integration, biometrics ...
+    // 2. Map the incoming step to the correct database fields
+    switch (step) {
+      case "goals":
+        if (data?.financialGoals) updateObject["onboarding.financialGoals"] = data.financialGoals;
+        break;
 
-    // 2. Add the step to completed list and move to next step
+      case "income":
+        if (data?.incomeSource) {
+          updateObject["onboarding.incomeSource"] = Array.isArray(data.incomeSource) 
+            ? data.incomeSource 
+            : [data.incomeSource];
+        }
+        if (data?.incomeRange) updateObject["onboarding.incomeRange"] = data.incomeRange;
+        break;
+
+      case "kyc":
+        // This usually triggers after your Xpress Wallet NUBAN generation
+        updateObject["KycStatus"] = "pending"; 
+        break;
+
+      case "integration":
+        // Flag for when they've successfully linked their first bank/wallet
+        updateObject["onboarding.accountIntegrated"] = true;
+        break;
+
+      case "biometrics":
+        if (data?.biometricEnabled !== undefined) {
+          updateObject["biometricEnabled"] = data.biometricEnabled;
+        }
+        break;
+
+      default:
+        return res.status(400).json({ status: "failed", message: "Invalid onboarding step." });
+    }
+
+    // 3. Persist data and update the completion array
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { 
         $set: updateObject,
-        $addToSet: { "onboarding.stepsCompleted": step }, // Prevents duplicates
+        $addToSet: { "onboarding.stepsCompleted": step }, 
       },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
-    // 3. Check if all 5 steps are done to set final flag
-    if (updatedUser.onboarding.stepsCompleted.length >= 5) {
+    if (!updatedUser) {
+      return res.status(404).json({ status: "failed", message: "User not found" });
+    }
+
+    // 4. Calculate Progress & Master Flag
+    const flow = ["goals", "income", "kyc", "integration", "biometrics"];
+    const completed = updatedUser.onboarding.stepsCompleted;
+    
+    // Determine the actual next step based on the defined flow
+    const nextStep = flow.find(s => !completed.includes(s)) || "completed";
+    
+    // Flip the master switch only if the full flow is satisfied
+    if (nextStep === "completed") {
         updatedUser.onboarding.hasCompletedOnboarding = true;
         updatedUser.onboarding.currentStep = "completed";
-        await updatedUser.save();
+    } else {
+        updatedUser.onboarding.currentStep = nextStep;
+        updatedUser.onboarding.hasCompletedOnboarding = false; // Stay false until 100%
     }
+
+    await updatedUser.save();
 
     return res.status(200).json({
       status: "success",
-      message: `Step ${step} saved.`,
-      // Return the flags the frontend needs
-      onboardingState: {
+      message: `Progress saved for step: ${step}`,
+      data: {
           stepsCompleted: updatedUser.onboarding.stepsCompleted,
-          nextStep: updatedUser.onboarding.currentStep,
-          isFullyComplete: updatedUser.onboarding.hasCompletedOnboarding
+          currentStep: updatedUser.onboarding.currentStep,
+          hasCompletedOnboarding: updatedUser.onboarding.hasCompletedOnboarding,
+          // Return the actual data saved for visual confirmation
+          savedData: updatedUser.onboarding
       }
     });
 
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    console.error("[ONBOARDING_UPDATE_ERROR]:", error);
+    return res.status(500).json({ status: "error", message: error.message });
   }
 };
