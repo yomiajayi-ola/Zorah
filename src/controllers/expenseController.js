@@ -15,13 +15,13 @@ export const addExpense = async (req, res) => {
     const user = await User.findById(userId);
 
     // 🛡️ GUARD: Limit to 5 entries for non-wallet users
-    if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
-            return res.status(403).json({
-        status: "failed",
-        hasReachedLimit: true, // Frontend triggers Wallet Modal
-        message: "You've reached the limit for manual expenses. Create a Zorah Wallet to unlock unlimited tracking!"
-      });
-    }
+    // if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
+    //         return res.status(403).json({
+    //     status: "failed",
+    //     hasReachedLimit: true, // Frontend triggers Wallet Modal
+    //     message: "You've reached the limit for manual expenses. Create a Zorah Wallet to unlock unlimited tracking!"
+    //   });
+    // }
     const { amount, category, date, description, paymentMethod } = req.body;
 
     const expense = new Expense({
