@@ -21,7 +21,7 @@ export const addExpense = async (req, res) => {
     //     hasReachedLimit: true, // Frontend triggers Wallet Modal
     //     message: "You've reached the limit for manual expenses. Create a Zorah Wallet to unlock unlimited tracking!"
     //   });
-    // }
+    // }`
     const { amount, category, date, description, paymentMethod } = req.body;
 
     const expense = new Expense({
