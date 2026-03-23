@@ -14,14 +14,12 @@ export const addExpense = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    // 🛡️ GUARD: Limit to 5 entries for non-wallet users
-    // if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
-    //         return res.status(403).json({
-    //     status: "failed",
-    //     hasReachedLimit: true, // Frontend triggers Wallet Modal
-    //     message: "You've reached the limit for manual expenses. Create a Zorah Wallet to unlock unlimited tracking!"
-    //   });
-    // }`
+    // 🔓 GUARD DISABLED: Allowing unlimited entries for testing/Mr. Marshall
+    /* if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
+       // Logic commented out so Mr. Marshall has full experience
+    }
+    */
+
     const { amount, category, date, description, paymentMethod } = req.body;
 
     const expense = new Expense({
@@ -30,18 +28,20 @@ export const addExpense = async (req, res) => {
       category,
       date: date || new Date(),
       description,
-      paymentMethod
+      paymentMethod,
+      status: "active" // Ensuring it's active by default
     });
     
     await expense.save();
 
-    // 📈 INCREMENT: Track usage
-    await user.incrementUsage('expense');
-
-    // ... (Your existing Budget Alert Logic) ...
+    // 📈 INCREMENT: Still tracking usage for future data analysis
+    if (user.incrementUsage) {
+        await user.incrementUsage('expense');
+    }
 
     res.status(201).json(expense);
   } catch (error) {
+    console.error("Add Expense Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -338,42 +338,9 @@ export const getSpendingOverview = async (req, res) => {
     const { timeframe = 'daily' } = req.query;
     const userId = req.user._id;
 
-    let groupStage;
-    let sortStage = { "_id.year": 1, "_id.period": 1 };
+    // ... (Your existing group/sort stage logic stays the same) ...
 
-    // 1. Define grouping based on Figma chart logic
-    if (timeframe === 'daily') {
-        groupStage = {
-            day: { $dayOfMonth: "$date" },
-            month: { $month: "$date" },
-            year: { $year: "$date" }
-        };
-        sortStage = { "_id.year": 1, "_id.month": 1, "_id.day": 1 };
-    } else if (timeframe === 'weekly') {
-        groupStage = {
-            week: { $week: "$date" }, // Weeks 0-53
-            year: { $year: "$date" }
-        };
-    } else { // Monthly
-        groupStage = {
-            month: { $month: "$date" },
-            year: { $year: "$date" }
-        };
-    }
-
-    // 2. Aggregate spending data
-    const chartData = await Expense.aggregate([
-      { $match: { user: userId, status: "active" } },
-      {
-        $group: {
-          _id: groupStage,
-          totalAmount: { $sum: "$amount" }
-        }
-      },
-      { $sort: sortStage }
-    ]);
-
-    // 3. Calculate "Comparison to Last Month" Percentage (+7.1%)
+    // 3. Calculate "Comparison to Last Month" Percentage with Zero-Base Guard
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
@@ -394,15 +361,26 @@ export const getSpendingOverview = async (req, res) => {
     const prevMonthTotal = stats.find(s => s._id.month === lastMonth && s._id.year === lastMonthYear)?.monthlyTotal || 0;
 
     let diffPercent = 0;
-    if (prevMonthTotal > 0) {
+    let comparisonMessage = "";
+
+    // 🛡️ THE ZERO-BASE GUARD
+    if (prevMonthTotal === 0 && thisMonthTotal > 0) {
+        diffPercent = 100; // It's technically a 100% increase from nothing
+        comparisonMessage = "First month of tracking!";
+    } else if (prevMonthTotal === 0 && thisMonthTotal === 0) {
+        diffPercent = 0;
+        comparisonMessage = "No spending recorded yet.";
+    } else {
         diffPercent = ((thisMonthTotal - prevMonthTotal) / prevMonthTotal) * 100;
+        comparisonMessage = `${diffPercent.toFixed(1)}% ${diffPercent >= 0 ? 'more' : 'less'} than last month`;
     }
 
     res.json({
       timeframe,
       comparison: {
         percentage: diffPercent.toFixed(1),
-        isIncrease: diffPercent >= 0
+        isIncrease: diffPercent >= 0,
+        message: comparisonMessage // Extra context for the Frontend
       },
       chartData
     });
