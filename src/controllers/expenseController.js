@@ -14,12 +14,6 @@ export const addExpense = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    // 🔓 GUARD DISABLED: Allowing unlimited entries for testing/Mr. Marshall
-    /* if (!user.walletId && user.usageMetrics.expensesLoggedCount >= 5) {
-       // Logic commented out so Mr. Marshall has full experience
-    }
-    */
-
     const { amount, category, date, description, paymentMethod } = req.body;
 
     const expense = new Expense({
@@ -29,19 +23,17 @@ export const addExpense = async (req, res) => {
       date: date || new Date(),
       description,
       paymentMethod,
-      status: "active" // Ensuring it's active by default
+      status: "active" 
     });
     
     await expense.save();
 
-    // 📈 INCREMENT: Still tracking usage for future data analysis
     if (user.incrementUsage) {
         await user.incrementUsage('expense');
     }
 
     res.status(201).json(expense);
   } catch (error) {
-    console.error("Add Expense Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -156,81 +148,125 @@ export const getExpense = async (req, res) => {
 
 // @desc Get Expense summary (total per category)
 export const getExpenseSummary = async (req, res) => {
-    try {
-        const summary = await Expense.aggregate([
-            { $match: { user: req.user._id } },
-            {
-              $group: {
-                _id: "$category",
-                total: { $sum: "$amount" },
-                count: { $sum: 1 },
-              },
-            },
-            { $sort: { total: -1 } },
-            {
-              $project: {
-                _id: 0,
-                category: "$_id",
-                total: 1,
-                count: 1,
-              },
-            },
-          ]);
-          
+  try {
+      const summary = await Expense.aggregate([
+          // 1. Security & Scope
+          { $match: { user: req.user._id, status: "active" } },
 
-        res.json(summary);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
+          // 2. Group by the subcategory ID first
+          {
+              $group: {
+                  _id: "$category", // This is the ID of the subcategory
+                  total: { $sum: "$amount" },
+                  count: { $sum: 1 },
+              },
+          },
+
+          // 3. JOIN with Categories (The container)
+          {
+              $lookup: {
+                  from: "categories", // Collection name for Category model
+                  pipeline: [
+                      { $unwind: "$subcategories" }, // Flatten the subcategories array
+                      { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
+                  ],
+                  as: "foundCategory"
+              }
+          },
+
+          // 4. Match the specific subcategory name
+          {
+              $project: {
+                  total: 1,
+                  count: 1,
+                  categoryName: {
+                      $arrayElemAt: [
+                          {
+                              $map: {
+                                  input: {
+                                      $filter: {
+                                          input: "$foundCategory",
+                                          as: "cat",
+                                          cond: { $eq: ["$$cat.subId", "$_id"] }
+                                      }
+                                  },
+                                  as: "match",
+                                  in: "$$match.name"
+                              }
+                          },
+                          0
+                      ]
+                  }
+              }
+          },
+
+          // 5. Final Formatting
+          {
+              $project: {
+                  _id: 0,
+                  category: { $ifNull: ["$categoryName", "Uncategorized"] },
+                  total: 1,
+                  count: 1
+              }
+          },
+          { $sort: { total: -1 } }
+      ]);
+
+      res.json(summary);
+  } catch (error) {
+      console.error("Summary Error:", error);
+      res.status(500).json({ message: error.message });
+  }
+};
 
 
 // @desc Get daily expense breakdown
 export const getDailyExpenses = async (req, res) => {
-    try {
-        const daily = await Expense.aggregate([
-            { $match: { user: req.user._id } },
-            {
-                $group: {
-                    _id: {
-                        day: { $dayOfMonth: "$date" },
-                        month: { $month: "$date" },
-                        year: { $year: "$date" },
-                        // $dateToString: { format: "%Y-%m-%d", date: "$date" },
-                    },
-                    total: { $sum: "$amount" },
-                }, 
-            }, 
-            { $sort: { "_id.year": -1, "_id.month": -1, "_id.day": -1 } },
-        ]);
+  try {
+      const daily = await Expense.aggregate([
+          // 🚩 FIX: Prevent seeing other users' daily data
+          { $match: { user: req.user._id, status: "active" } },
+          {
+              $group: {
+                  _id: {
+                      day: { $dayOfMonth: "$date" },
+                      month: { $month: "$date" },
+                      year: { $year: "$date" },
+                  },
+                  total: { $sum: "$amount" },
+              }, 
+          }, 
+          { $sort: { "_id.year": -1, "_id.month": -1, "_id.day": -1 } },
+      ]);
 
-        res.json(daily);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+      res.json(daily);
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
 };
 
 // @desc Get monthly expense breakdown
 export const getMonthlyExpenses = async (req, res) => {
-    try {
-        const monthlySummary = await Expense.aggregate([
-            {
-                $group: {
-                    _id: {
-                        month: { $month: "$date" },
-                        year: { $year: "$date" },
-                    },
-                    total: { $sum: "$amount" },
-                },
-            },
-            { $sort: { "_id.year": -1, "_id.month": -1} },
-        ]);
-        res.json(monthlySummary);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+  try {
+      const monthlySummary = await Expense.aggregate([
+          // 🚩 FIX: Only pull data for THIS user
+          { $match: { user: req.user._id, status: "active" } },
+          {
+              $group: {
+                  _id: {
+                      month: { $month: "$date" },
+                      year: { $year: "$date" },
+                  },
+                  total: { $sum: "$amount" },
+              },
+          },
+          { $sort: { "_id.year": -1, "_id.month": -1} },
+      ]);
+      res.json(monthlySummary);
+  } catch (error) {
+      res.status(500).json({ message: error.message });
+  }
 }
-
 export const getExpenseById = async (req, res) => {
   try {
     const expense = await Expense.findOne({
