@@ -289,49 +289,40 @@ export const updateOnboardingProfile = async (req, res) => {
     const userId = req.user._id;
     const { step, data } = req.body; 
 
-    // 1. Validation: Ensure step is provided
     if (!step) {
       return res.status(400).json({ status: "failed", message: "Step identifier is required." });
     }
 
     const updateObject = {};
     
-    // 2. Map the incoming step to the correct database fields
     switch (step) {
       case "goals":
-        if (data?.financialGoals) updateObject["onboarding.financialGoals"] = data.financialGoals;
+        // Step 1 requires data
+        if (!data?.financialGoals) return res.status(400).json({ message: "Goals data required" });
+        updateObject["onboarding.financialGoals"] = data.financialGoals;
         break;
 
       case "income":
-        if (data?.incomeSource) {
-          updateObject["onboarding.incomeSource"] = Array.isArray(data.incomeSource) 
-            ? data.incomeSource 
-            : [data.incomeSource];
-        }
-        if (data?.incomeRange) updateObject["onboarding.incomeRange"] = data.incomeRange;
+        // Step 2 requires data
+        if (!data?.incomeSource) return res.status(400).json({ message: "Income data required" });
+        updateObject["onboarding.incomeSource"] = data.incomeSource;
         break;
 
       case "kyc":
-        // This usually triggers after your Xpress Wallet NUBAN generation
-        updateObject["KycStatus"] = "pending"; 
+        // Step 3 is SYNC ONLY (Data handled by Xpress Wallet API)
+        updateObject["onboarding.kycCompleted"] = true; 
         break;
 
       case "integration":
-        // Flag for when they've successfully linked their first bank/wallet
+        // Step 4 is SYNC ONLY (Data handled by Bank API)
         updateObject["onboarding.accountIntegrated"] = true;
-        break;
-
-      case "biometrics":
-        if (data?.biometricEnabled !== undefined) {
-          updateObject["biometricEnabled"] = data.biometricEnabled;
-        }
         break;
 
       default:
         return res.status(400).json({ status: "failed", message: "Invalid onboarding step." });
     }
 
-    // 3. Persist data and update the completion array
+    // 2. Persist data
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { 
@@ -345,20 +336,21 @@ export const updateOnboardingProfile = async (req, res) => {
       return res.status(404).json({ status: "failed", message: "User not found" });
     }
 
-    // 4. Calculate Progress & Master Flag
-    const flow = ["goals", "income", "kyc", "integration", "biometrics"];
+    // 3. New 4-Step Flow Logic
+    const flow = ["goals", "income", "kyc", "integration"]; // Removed biometrics
     const completed = updatedUser.onboarding.stepsCompleted;
     
-    // Determine the actual next step based on the defined flow
+    // Find the next available step in the 4-step sequence
     const nextStep = flow.find(s => !completed.includes(s)) || "completed";
     
-    // Flip the master switch only if the full flow is satisfied
     if (nextStep === "completed") {
         updatedUser.onboarding.hasCompletedOnboarding = true;
         updatedUser.onboarding.currentStep = "completed";
+        // Also update the top-level flag if you have one
+        updatedUser.hasCompletedOnboarding = true; 
     } else {
         updatedUser.onboarding.currentStep = nextStep;
-        updatedUser.onboarding.hasCompletedOnboarding = false; // Stay false until 100%
+        updatedUser.onboarding.hasCompletedOnboarding = false; 
     }
 
     await updatedUser.save();
@@ -370,8 +362,7 @@ export const updateOnboardingProfile = async (req, res) => {
           stepsCompleted: updatedUser.onboarding.stepsCompleted,
           currentStep: updatedUser.onboarding.currentStep,
           hasCompletedOnboarding: updatedUser.onboarding.hasCompletedOnboarding,
-          // Return the actual data saved for visual confirmation
-          savedData: updatedUser.onboarding
+          nextStep: nextStep === "completed" ? null : nextStep
       }
     });
 
