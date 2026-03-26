@@ -1,5 +1,5 @@
 import express from "express";
-import { registerUser, loginUser, getProfile, setUserPin, verifyUserPin, toggleBiometric, requestPasswordReset, resetPassword, refreshAccessToken, updateOnboardingProfile } from "../controllers/authController.js";
+import { registerUser, loginUser, getProfile, setUserPin, verifyUserPin, toggleBiometric, requestPasswordReset, resetPassword, refreshAccessToken, updateOnboardingProfile, updateProfile } from "../controllers/authController.js";
 import { googleAuth } from "../controllers/googleAuthController.js";
 import User from "../models/User.js";
 
@@ -10,6 +10,7 @@ const router = express.Router();
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/profile", protect, getProfile);
+router.put("/profile", protect, updateProfile);
 router.post("/request-reset", requestPasswordReset);
 router.post("/reset-password", resetPassword);
 router.post("/refresh-token", refreshAccessToken)

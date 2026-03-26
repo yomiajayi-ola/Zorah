@@ -369,5 +369,60 @@ export const updateOnboardingProfile = async (req, res) => {
   } catch (error) {
     console.error("[ONBOARDING_UPDATE_ERROR]:", error);
     return res.status(500).json({ status: "error", message: error.message });
+  } 
+};
+
+
+// @desc    Update user profile details
+// @route   PUT /api/users/profile
+// @access  Private
+export const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const { name, email, phoneNumber } = req.body;
+
+    // 1. Handle Name Splitting (Full Name -> First & Last)
+    if (name) {
+      const nameParts = name.trim().split(" ");
+      user.firstName = nameParts[0] || user.firstName;
+      // Join remaining parts as lastName (e.g., "Akeem Oluwasey Mudash" -> "Oluwasey Mudash")
+      user.lastName = nameParts.slice(1).join(" ") || user.lastName;
+    }
+
+    // 2. Handle Email Change (Check for duplicates)
+    if (email && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+      user.email = email;
+    }
+
+    // 3. Update Phone Number
+    if (phoneNumber) {
+      user.phoneNumber = phoneNumber;
+    }
+
+    const updatedUser = await user.save();
+
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        phoneNumber: updatedUser.phoneNumber,
+        isUsageRestricted: updatedUser.onboarding?.isUsageRestricted ?? true
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
