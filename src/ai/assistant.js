@@ -39,17 +39,6 @@ export const aiAssistant = async (req, res) => {
         const userId = req.user.id;
         const { message } = req.body;
 
-        // 🛡️ 1. USAGE GUARD: Check limits before calling Gemini (Saves money/tokens)
-        const user = await User.findById(userId);
-        if (!user.walletId && user.usageMetrics.isFeatureLocked) {
-            return res.status(403).json({
-                status: "failed",
-                hasReachedLimit: true, // Frontend uses this to trigger Wallet Modal
-                reply: "You've reached your free AI limit. Create a Zorah Wallet to unlock unlimited access!",
-                intent: "limit-reached"
-            });
-        }
-
         const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
         // 2. Detect intent & fetch data
