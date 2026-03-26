@@ -362,6 +362,10 @@ export const updateOnboardingProfile = async (req, res) => {
           stepsCompleted: updatedUser.onboarding.stepsCompleted,
           currentStep: updatedUser.onboarding.currentStep,
           hasCompletedOnboarding: updatedUser.onboarding.hasCompletedOnboarding,
+          // Added incomeRange 
+          incomeRange: updatedUser.onboarding.incomeRange,
+          incomeSource: updatedUser.onboarding.incomeSource,
+          financialGoals: updatedUser.onboarding.financialGoals,
           nextStep: nextStep === "completed" ? null : nextStep
       }
     });
