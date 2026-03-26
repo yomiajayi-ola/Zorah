@@ -10,7 +10,7 @@ const router = express.Router();
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/profile", protect, getProfile);
-router.put("/profile", protect, updateProfile);
+router.put("/update-profile", protect, updateProfile);
 router.post("/request-reset", requestPasswordReset);
 router.post("/reset-password", resetPassword);
 router.post("/refresh-token", refreshAccessToken)
