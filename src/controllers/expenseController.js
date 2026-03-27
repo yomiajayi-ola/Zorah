@@ -110,27 +110,54 @@ export const getExpense = async (req, res) => {
       }
 
       // ====== FETCH FILTERED EXPENSES ======
-      const expenses = await Expense.find(query)
-                                  .sort({ date: -1 }); // Sort by date descending
+      // ====== FETCH FILTERED EXPENSES WITH LOOKUP ======
+      const expenses = await Expense.aggregate([
+        { $match: query },
+        {
+            $lookup: {
+                from: "categories",
+                pipeline: [
+                    { $unwind: "$subcategories" },
+                    { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
+                ],
+                as: "categoryDetails"
+            }
+        },
+        {
+            $addFields: {
+                categoryName: {
+                    $arrayElemAt: [
+                        {
+                            $map: {
+                                input: {
+                                    $filter: {
+                                        input: "$categoryDetails",
+                                        as: "cat",
+                                        cond: { $eq: ["$$cat.subId", "$category"] }
+                                    }
+                                },
+                                as: "match",
+                                in: "$$match.name"
+                            }
+                        },
+                        0
+                    ]
+                }
+            }
+        },
+        { $sort: { date: -1 } }
+    ]);
 
-      // ====== 3️⃣ DATA MAPPING AND STRUCTURE ADJUSTMENT (NEW LOGIC) ======
-      const data = expenses.map((expense) => {
-          
-          // Convert Mongoose document to a plain object
-          const expenseObject = expense.toObject(); 
-
-          // Calculate month and year from the date field
-          const d = expense.date; 
-          const expenseMonth = d.getMonth() + 1; // getMonth() returns 0-11, so +1
-          const expenseYear = d.getFullYear();
-
-          // Return the new structured object with month/year added
-          return {
-              ...expenseObject, 
-              month: expenseMonth,
-              year: expenseYear,
-          };
-      });
+    // Map the data to add month/year as you did before
+    const data = expenses.map((expense) => {
+        const d = new Date(expense.date); 
+        return {
+            ...expense,
+            category: expense.categoryName || "Uncategorized", // Send the Name, not the ID
+            month: d.getMonth() + 1,
+            year: d.getFullYear(),
+        };
+    });
 
 
       // 🛑 Return the expenses data
@@ -164,15 +191,15 @@ export const getExpenseSummary = async (req, res) => {
 
           // 3. JOIN with Categories (The container)
           {
-              $lookup: {
-                  from: "categories", // Collection name for Category model
-                  pipeline: [
-                      { $unwind: "$subcategories" }, // Flatten the subcategories array
-                      { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
-                  ],
-                  as: "foundCategory"
-              }
-          },
+            $lookup: {
+                from: "categories", // 🚩 Ensure this is lowercase plural if that's your DB name
+                pipeline: [
+                    { $unwind: "$subcategories" },
+                    { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
+                ],
+                as: "foundCategory"
+            }
+        },
 
           // 4. Match the specific subcategory name
           {
