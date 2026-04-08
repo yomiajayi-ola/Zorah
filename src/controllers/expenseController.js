@@ -41,197 +41,188 @@ export const addExpense = async (req, res) => {
 // @desc Get All expenses for user 
 export const getExpense = async (req, res) => {
   try {
-      // --- Prepare Query ---
-      const isMonthsOnlyRequest = !!req.query.monthsOnly;
-      const { month, year, category, status } = req.query; 
-      
-      const userId = req.user._id; 
-      const query = { user: userId };
-      
-      // ====== 1️⃣ RETURN ONLY MONTHS AVAILABLE (monthsOnly=true) ======
-      if (isMonthsOnlyRequest) {
-          
-          const uniqueMonths = await Expense.aggregate([
-              { $match: query }, // Filter by user ID
-              {
-                  $group: {
-                      _id: {
-                          month: { $month: "$date" },
-                          year: { $year: "$date" }
-                      }
-                  }
-              },
-              {
-                  $project: {
-                      _id: 0,
-                      month: "$_id.month",
-                      year: "$_id.year"
-                  }
-              },
-              { $sort: { year: 1, month: 1 } }
-          ]);
+    const isMonthsOnlyRequest = !!req.query.monthsOnly;
+    const { month, year, category, status } = req.query;
+    const userId = req.user._id;
 
-          return res.status(200).json({ months: uniqueMonths });
-      }
+    // 1. Initial Match Stage
+    const matchQuery = { user: userId };
+    
+    // Status Filter (Default to active)
+    matchQuery.status = status ? status.toString().trim().toLowerCase() : "active";
 
-      // --- Build Filtering Query (If not monthsOnly) ---
-      
-      // A. Filter by status (Default to 'active')
-      if (status) {
-          query.status = status.toString().trim().toLowerCase();
-      } else {
-          // Default behavior: only show active expenses
-          query.status = "active"; 
-      }
+    // Category Filter (Optional)
+    if (category) matchQuery.category = category.toString().trim();
 
-      // B. Filter by month and year (Requires calculating date range)
-      if (month && year) {
-          const m = Number(month);
-          const y = Number(year);
-          
-          // Start of the month (e.g., 2026-01-01T00:00:00.000Z)
-          const startOfMonth = new Date(y, m - 1, 1);
-          
-          // End of the month (Day 0 of the next month)
-          const endOfMonth = new Date(y, m, 0, 23, 59, 59, 999); 
-          
-          query.date = {
-              $gte: startOfMonth,
-              $lte: endOfMonth
-          };
-      } else if (month || year) {
-          // Error handling if only one is provided
-          return res.status(400).json({ message: "Must provide both month and year for date filtering." });
-      }
-
-      // C. Filter by category
-      if (category) {
-          query.category = category.toString().trim();
-      }
-
-      // ====== FETCH FILTERED EXPENSES ======
-      // ====== FETCH FILTERED EXPENSES WITH LOOKUP ======
-      const expenses = await Expense.aggregate([
-        { $match: query },
+    // 2. Handle "Months Only" Request
+    if (isMonthsOnlyRequest) {
+      const uniqueMonths = await Expense.aggregate([
+        { $match: matchQuery },
         {
-            $lookup: {
-                from: "categories",
-                pipeline: [
-                    { $unwind: "$subcategories" },
-                    { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
-                ],
-                as: "categoryDetails"
+          $group: {
+            _id: {
+              month: { $month: "$date" },
+              year: { $year: "$date" }
             }
+          }
         },
         {
-            $addFields: {
-                categoryName: {
-                    $arrayElemAt: [
-                        {
-                            $map: {
-                                input: {
-                                    $filter: {
-                                        input: "$categoryDetails",
-                                        as: "cat",
-                                        cond: { $eq: ["$$cat.subId", "$category"] }
-                                    }
-                                },
-                                as: "match",
-                                in: "$$match.name"
-                            }
-                        },
-                        0
-                    ]
+          $project: {
+            _id: 0,
+            month: "$_id.month",
+            year: "$_id.year"
+          }
+        },
+        { $sort: { year: 1, month: 1 } }
+      ]);
+      return res.status(200).json({ months: uniqueMonths });
+    }
+
+    // 3. Date Filtering (If month/year provided)
+    if (month && year) {
+      const m = Number(month);
+      const y = Number(year);
+      matchQuery.date = {
+        $gte: new Date(y, m - 1, 1),
+        $lte: new Date(y, m, 0, 23, 59, 59, 999)
+      };
+    }
+
+    // 4. Main Data Aggregation
+    const expenses = await Expense.aggregate([
+      { $match: matchQuery },
+      {
+        $lookup: {
+          from: "categories",
+          let: { expenseCat: "$category" },
+          pipeline: [
+            { $unwind: "$subcategories" },
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    // Match if it's the Name (e.g., "Vacation")
+                    { $eq: ["$subcategories.name", "$$expenseCat"] },
+                    // Match if it's a valid ID (Regex prevents crashing on non-hex strings)
+                    {
+                      $and: [
+                        { $regexMatch: { input: { $ifNull: ["$$expenseCat", ""] }, regex: /^[0-9a-fA-F]{24}$/ } },
+                        { $eq: ["$subcategories._id", { $toObjectId: "$$expenseCat" }] }
+                      ]
+                    }
+                  ]
                 }
-            }
-        },
-        { $sort: { date: -1 } }
+              }
+            },
+            { $project: { _id: 0, name: "$subcategories.name" } }
+          ],
+          as: "categoryDetails"
+        }
+      },
+      {
+        $project: {
+          amount: 1,
+          description: 1,
+          paymentMethod: 1,
+          date: 1,
+          status: 1,
+          createdAt: 1,
+          // Extract the name or fallback to the raw category string
+          category: {
+            $ifNull: [
+              { $arrayElemAt: ["$categoryDetails.name", 0] },
+              "$category"
+            ]
+          },
+          month: { $month: "$date" },
+          year: { $year: "$date" }
+        }
+      },
+      { $sort: { date: -1 } }
     ]);
 
-    // Map the data to add month/year as you did before
-    const data = expenses.map((expense) => {
-        const d = new Date(expense.date); 
-        return {
-            ...expense,
-            category: expense.categoryName || "Uncategorized", // Send the Name, not the ID
-            month: d.getMonth() + 1,
-            year: d.getFullYear(),
-        };
+    return res.json({
+      data: expenses,
+      month: month ? Number(month) : null,
+      year: year ? Number(year) : null
     });
 
-
-      // 🛑 Return the expenses data
-      return res.json({
-          data: data, 
-          month: month ? Number(month) : null,
-          year: year ? Number(year) : null
-      });
-
   } catch (error) {
-      console.error("Error in getExpense:", error);
-      res.status(500).json({ message: error.message });
+    console.error("Error in getExpense:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
 // @desc Get Expense summary (total per category)
 export const getExpenseSummary = async (req, res) => {
   try {
-    const summary = await Expense.aggregate([
-      // 1. Filter by User and Status
-      { $match: { user: req.user._id, status: "active" } },
+      const summary = await Expense.aggregate([
+          // 1. Security & Scope
+          { $match: { user: req.user._id, status: "active" } },
 
-      // 2. Group by the subcategory ID
-      {
-        $group: {
-          _id: "$category", 
-          total: { $sum: "$amount" },
-          count: { $sum: 1 },
+          // 2. Group by the subcategory ID first
+          {
+              $group: {
+                  _id: "$category", // This is the ID of the subcategory
+                  total: { $sum: "$amount" },
+                  count: { $sum: 1 },
+              },
+          },
+
+          // 3. JOIN with Categories (The container)
+          {
+            $lookup: {
+                from: "categories", // 🚩 Ensure this is lowercase plural if that's your DB name
+                pipeline: [
+                    { $unwind: "$subcategories" },
+                    { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
+                ],
+                as: "foundCategory"
+            }
         },
-      },
 
-      // 3. Join with Categories to find the Subcategory Name
-      {
-        $lookup: {
-          from: "categories",
-          let: { expenseCatId: "$_id" }, // Use the grouped _id (the category string)
-          pipeline: [
-            { $unwind: "$subcategories" },
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$subcategories._id", { $toObjectId: "$$expenseCatId" }]
-                }
+          // 4. Match the specific subcategory name
+          {
+              $project: {
+                  total: 1,
+                  count: 1,
+                  categoryName: {
+                      $arrayElemAt: [
+                          {
+                              $map: {
+                                  input: {
+                                      $filter: {
+                                          input: "$foundCategory",
+                                          as: "cat",
+                                          cond: { $eq: ["$$cat.subId", "$_id"] }
+                                      }
+                                  },
+                                  as: "match",
+                                  in: "$$match.name"
+                              }
+                          },
+                          0
+                      ]
+                  }
               }
-            },
-            { $project: { _id: 0, name: "$subcategories.name" } }
-          ],
-          as: "categoryInfo"
-        }
-      },
+          },
 
-      // 4. Flatten the category name and format the output
-      {
-        $project: {
-          _id: 0,
-          total: 1,
-          count: 1,
-          category: {
-            $ifNull: [
-              { $arrayElemAt: ["$categoryInfo.name", 0] },
-              "Uncategorized"
-            ]
-          }
-        }
-      },
+          // 5. Final Formatting
+          {
+              $project: {
+                  _id: 0,
+                  category: { $ifNull: ["$categoryName", "Uncategorized"] },
+                  total: 1,
+                  count: 1
+              }
+          },
+          { $sort: { total: -1 } }
+      ]);
 
-      // 5. Sort by highest spending
-      { $sort: { total: -1 } }
-    ]);
-
-    res.json(summary);
+      res.json(summary);
   } catch (error) {
-    console.error("Summary Error:", error);
-    res.status(500).json({ message: error.message });
+      console.error("Summary Error:", error);
+      res.status(500).json({ message: error.message });
   }
 };
 
