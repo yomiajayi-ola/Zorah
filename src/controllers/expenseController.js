@@ -176,87 +176,62 @@ export const getExpense = async (req, res) => {
 // @desc Get Expense summary (total per category)
 export const getExpenseSummary = async (req, res) => {
   try {
-      const summary = await Expense.aggregate([
-          // 1. Security & Scope
-          { $match: { user: req.user._id, status: "active" } },
+    const summary = await Expense.aggregate([
+      // 1. Filter by User and Status
+      { $match: { user: req.user._id, status: "active" } },
 
-          // 2. Group by the subcategory ID first
-          {
-              $group: {
-                  _id: "$category", // This is the ID of the subcategory
-                  total: { $sum: "$amount" },
-                  count: { $sum: 1 },
-              },
-          },
-
-          // 3. JOIN with Categories (The container)
-          {
-            $lookup: {
-                from: "categories",
-                let: { expenseCatId: "$category" }, // Capture the category string from Expense
-                pipeline: [
-                    { $unwind: "$subcategories" },
-                    { 
-                        $match: { 
-                            $expr: { 
-                                // 🎯 CONVERSION: Ensure we compare ObjectId to ObjectId
-                                $eq: ["$subcategories._id", { $toObjectId: "$$expenseCatId" }] 
-                            } 
-                        } 
-                    },
-                    { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
-                ],
-                as: "categoryDetails"
-            }
+      // 2. Group by the subcategory ID
+      {
+        $group: {
+          _id: "$category", 
+          total: { $sum: "$amount" },
+          count: { $sum: 1 },
         },
-        {
-            $addFields: {
-                categoryName: { $arrayElemAt: ["$categoryDetails.name", 0] }
-            }
-        },
+      },
 
-          // 4. Match the specific subcategory name
-          {
-              $project: {
-                  total: 1,
-                  count: 1,
-                  categoryName: {
-                      $arrayElemAt: [
-                          {
-                              $map: {
-                                  input: {
-                                      $filter: {
-                                          input: "$foundCategory",
-                                          as: "cat",
-                                          cond: { $eq: ["$$cat.subId", "$_id"] }
-                                      }
-                                  },
-                                  as: "match",
-                                  in: "$$match.name"
-                              }
-                          },
-                          0
-                      ]
-                  }
+      // 3. Join with Categories to find the Subcategory Name
+      {
+        $lookup: {
+          from: "categories",
+          let: { expenseCatId: "$_id" }, // Use the grouped _id (the category string)
+          pipeline: [
+            { $unwind: "$subcategories" },
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$subcategories._id", { $toObjectId: "$$expenseCatId" }]
+                }
               }
-          },
+            },
+            { $project: { _id: 0, name: "$subcategories.name" } }
+          ],
+          as: "categoryInfo"
+        }
+      },
 
-          // 5. Final Formatting
-          {
-              $project: {
-                  _id: 0,
-                  category: { $ifNull: ["$categoryName", "Uncategorized"] },
-                  total: 1,
-                  count: 1
-              }
-          },
-          { $sort: { total: -1 } }
-      ]);
+      // 4. Flatten the category name and format the output
+      {
+        $project: {
+          _id: 0,
+          total: 1,
+          count: 1,
+          category: {
+            $ifNull: [
+              { $arrayElemAt: ["$categoryInfo.name", 0] },
+              "Uncategorized"
+            ]
+          }
+        }
+      },
 
-      res.json(summary);
+      // 5. Sort by highest spending
+      { $sort: { total: -1 } }
+    ]);
+
+    res.json(summary);
   } catch (error) {
-      console.error("Summary Error:", error);
-      res.status(500).json({ message: error.message });
+    console.error("Summary Error:", error);
+    res.status(500).json({ message: error.message });
   }
 };
 
