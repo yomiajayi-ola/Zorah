@@ -39,6 +39,11 @@ export const aiAssistant = async (req, res) => {
         const userId = req.user.id;
         const { message } = req.body;
 
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
         const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
         // 2. Detect intent & fetch data
