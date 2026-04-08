@@ -192,12 +192,26 @@ export const getExpenseSummary = async (req, res) => {
           // 3. JOIN with Categories (The container)
           {
             $lookup: {
-                from: "categories", // 🚩 Ensure this is lowercase plural if that's your DB name
+                from: "categories",
+                let: { expenseCatId: "$category" }, // Capture the category string from Expense
                 pipeline: [
                     { $unwind: "$subcategories" },
+                    { 
+                        $match: { 
+                            $expr: { 
+                                // 🎯 CONVERSION: Ensure we compare ObjectId to ObjectId
+                                $eq: ["$subcategories._id", { $toObjectId: "$$expenseCatId" }] 
+                            } 
+                        } 
+                    },
                     { $project: { name: "$subcategories.name", subId: "$subcategories._id" } }
                 ],
-                as: "foundCategory"
+                as: "categoryDetails"
+            }
+        },
+        {
+            $addFields: {
+                categoryName: { $arrayElemAt: ["$categoryDetails.name", 0] }
             }
         },
 
