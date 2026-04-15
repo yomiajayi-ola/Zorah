@@ -40,14 +40,14 @@ const categories = [
     name: 'Expense',
     type: 'expense',
     subcategories: [
-      // { name: 'Call', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
+      { name: 'Airtime & Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
       { name: 'Health', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Health.png' },
       { name: 'Skincare', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Skincare.png' },
       { name: 'Giveaway', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Giveaway.png' },
 
       { name: 'POS Charges', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/POS.png' },
       { name: 'Hangout', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Restaurant.png' },
-      { name: 'Groceries', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Dining.png' },
+      // { name: 'Groceries', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Dining.png' },
       { name: 'Rent/Mortgage', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Rent%3AMortgage.png' },
       { name: 'Electricity', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Electricity.png' },
       { name: 'Water', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/water.png' },

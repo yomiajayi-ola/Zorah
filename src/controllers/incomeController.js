@@ -4,19 +4,22 @@ import Income from "../models/Income.js";
 export const addIncome = async (req, res) => {
   try {
     const userId = req.user._id;
+    // If 'source' isn't provided by the frontend, use the 'category' as the source
     const { source, amount, description, category, date } = req.body;
 
-    if (!source || !amount) {
-      return res.status(400).json({ message: "Source and amount are required" });
+    const finalSource = source || category; 
+
+    if (!finalSource || !amount) {
+      return res.status(400).json({ message: "Income source and amount are required" });
     }
 
     const income = await Income.create({
       user: userId,
-      source,
+      source: finalSource,
       amount,
       description,
       category,
-      date,
+      date: date || new Date(),
     });
 
     res.status(201).json({
