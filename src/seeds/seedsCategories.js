@@ -70,7 +70,7 @@ const categories = [
     type: 'savings',
     subcategories: [
       { name: 'Car', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Car%3AVehicle.png' },
-      { name: 'Education', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Education.pngg' },
+      { name: 'Education', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Education.png' },
       { name: 'Home / Rent', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Home%3AReal+Estate.png' },
       { name: 'Wedding', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Wedding%3AMarriage.png' },
       { name: 'Debt', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/savings/Debt+Payoff+Goal.png' },
