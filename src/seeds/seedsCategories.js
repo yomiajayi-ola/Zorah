@@ -55,7 +55,7 @@ const categories = [
       { name: 'Home Repairs', group: 'Daily Living & Utilities', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Repairs.png' },
       
       // Group: Communications & Tech
-      { name: 'Airtime & Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
+      // { name: 'Airtime & Data', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Airtime%3ACalls.png' },
       { name: 'Cable TV (DSTV, GOTV, etc', group: 'Communications & Tech', image: 'https://zorah-category-images.s3.eu-north-1.amazonaws.com/expense/Cable+TV.png' },
 
       // Group: Transportation
