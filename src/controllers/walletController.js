@@ -259,8 +259,22 @@ export const getOverview = async (req, res) => {
       });
     }
 
+    const chartData = transactions.reduce((acc, curr) => {
+      const date = curr.createdAt.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      const existing = acc.find(item => item.date === date);
+      
+      if (existing) {
+        existing[curr.type] = (existing[curr.type] || 0) + curr.amount;
+      } else {
+        acc.push({ 
+          date, 
+          [curr.type]: curr.amount 
+        });
+      }
+      return acc;
+    }, []);
+
     // 3. Return the data directly from your MongoDB
-    // The balance here will reflect the 1200 you see in your logs
     res.status(200).json({
       success: true,
       account: {
