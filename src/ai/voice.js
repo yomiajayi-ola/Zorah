@@ -21,7 +21,6 @@ const addExpenseDeclaration = {
     required: ["amount", "category", "description"],
   },
 };
-
 export const voiceExpenseLogger = async (req, res) => {
   try {
     const userInput = req.body.message;
@@ -29,29 +28,61 @@ export const voiceExpenseLogger = async (req, res) => {
 
     if (!userInput) return res.status(400).json({ error: "Message is required" });
 
-    // 🛡️ 1. FETCH & GUARD
     const user = await User.findById(userId);
-    if (!user.walletId && (user.usageMetrics.expensesLoggedCount >= 5 || user.usageMetrics.isFeatureLocked)) {
-        return res.status(403).json({ // <--- THE 'RETURN' IS VITAL
-            status: "failed",
-            hasReachedLimit: true,
-            message: "Limit reached. Create a Zorah Wallet to continue."
+
+     
+    // 1. Initialize the SDK
+    const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    // 2. Initialize the model WITHOUT forcing v1
+    // Using the 'models/' prefix helps avoid the 404 error
+    const model = ai.getGenerativeModel({ 
+      model: "models/gemini-2.5-flash", 
+      tools: [{ functionDeclarations: [addExpenseDeclaration] }] 
+    });
+
+      const toolConfig = {
+  function_calling_config: {
+    mode: "ANY", // 🎯 This forces the AI to use a function, no "chatting" allowed
+    allowed_function_names: ["add_expense_to_db"]
+  }
+};
+
+
+    const chat = model.startChat();
+    const result = await chat.sendMessage(userInput);
+    
+    // 3. Robust extraction of function calls
+    const response = result.response;
+    const call = response.functionCalls() ? response.functionCalls()[0] : null;
+    
+    if (call && call.name === "add_expense_to_db") {
+        const { amount, category, description } = call.args;
+
+        const newExpense = await Expense.create({
+            user: userId,
+            amount,
+            category,
+            description,
+            date: new Date()
+        });
+
+        await user.incrementUsage('expense');
+
+        return res.json({
+            status: "success",
+            message: `Logged ₦${amount} under ${category}.`,
+            expense: newExpense,
+        });
+    } else {
+        // If the AI just talked back instead of calling the function
+        const textFallback = response.text();
+        return res.status(400).json({ 
+            status: "error", 
+            message: "AI provided a text response instead of logging the expense.",
+            aiResponse: textFallback 
         });
     }
-
-    // --- IF THE CODE REACHES HERE, IT PROCEEDS TO AI ---
-    const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    
-    // ... rest of your Gemini code ...
-
-    // At the very end, after creating the expense:
-    await user.incrementUsage('expense');
-      
-    return res.json({
-      status: "success",
-      message: `Logged ₦${amount} under ${category}.`,
-      expense: newExpense,
-    });
 
   } catch (err) {
     console.error("Voice Expense Logger Error:", err);

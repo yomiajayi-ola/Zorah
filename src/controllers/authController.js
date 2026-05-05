@@ -295,32 +295,35 @@ export const updateOnboardingProfile = async (req, res) => {
 
     const updateObject = {};
     
-    switch (step) {
-      case "goals":
-        // Step 1 requires data
-        if (!data?.financialGoals) return res.status(400).json({ message: "Goals data required" });
-        updateObject["onboarding.financialGoals"] = data.financialGoals;
-        break;
+      switch (step) {
+    case "goals":
+      if (!data?.financialGoals) return res.status(400).json({ message: "Goals data required" });
+      updateObject["onboarding.financialGoals"] = data.financialGoals;
+      break;
 
-      case "income":
-        // Step 2 requires data
-        if (!data?.incomeSource) return res.status(400).json({ message: "Income data required" });
-        updateObject["onboarding.incomeSource"] = data.incomeSource;
-        break;
+    case "income":
+      if (!data?.incomeSource) return res.status(400).json({ message: "Income data required" });
+      updateObject["onboarding.incomeSource"] = data.incomeSource;
+      // Also handle incomeRange if provided in the body
+      if (req.body.incomeRange) updateObject["onboarding.incomeRange"] = req.body.incomeRange;
+      break;
 
-      case "kyc":
-        // Step 3 is SYNC ONLY (Data handled by Xpress Wallet API)
-        updateObject["onboarding.kycCompleted"] = true; 
-        break;
+    case "kyc":
+      updateObject["onboarding.kycCompleted"] = true; 
+      break;
 
-      case "integration":
-        // Step 4 is SYNC ONLY (Data handled by Bank API)
-        updateObject["onboarding.accountIntegrated"] = true;
-        break;
+    case "integration":
+      updateObject["onboarding.accountIntegrated"] = true;
+      break;
 
-      default:
-        return res.status(400).json({ status: "failed", message: "Invalid onboarding step." });
-    }
+    
+    case "biometrics":
+      updateObject["biometricEnabled"] = true;
+      break;
+
+    default:
+      return res.status(400).json({ status: "failed", message: "Invalid onboarding step." });
+  }
 
     // 2. Persist data
     const updatedUser = await User.findByIdAndUpdate(
