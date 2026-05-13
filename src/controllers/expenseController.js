@@ -343,9 +343,30 @@ export const getSpendingOverview = async (req, res) => {
     const { timeframe = 'daily' } = req.query;
     const userId = req.user._id;
 
-    // ... (Your existing group/sort stage logic stays the same) ...
+    // 1. Logic to define the Grouping ID based on timeframe
+    let groupStage = {};
+    if (timeframe === 'monthly') {
+      groupStage = { month: { $month: "$date" }, year: { $year: "$date" } };
+    } else if (timeframe === 'weekly') {
+      groupStage = { week: { $week: "$date" }, year: { $year: "$date" } };
+    } else {
+      // Default to daily
+      groupStage = { day: { $dayOfMonth: "$date" }, month: { $month: "$date" }, year: { $year: "$date" } };
+    }
 
-    // 3. Calculate "Comparison to Last Month" Percentage with Zero-Base Guard
+    // 2. Generate the chartData
+    const chartData = await Expense.aggregate([
+      { $match: { user: userId, status: "active" } },
+      {
+        $group: {
+          _id: groupStage,
+          total: { $sum: "$amount" }
+        }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1, "_id.day": 1, "_id.week": 1 } }
+    ]);
+
+    // 3. Comparison Logic (Your existing code)
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
@@ -368,9 +389,8 @@ export const getSpendingOverview = async (req, res) => {
     let diffPercent = 0;
     let comparisonMessage = "";
 
-    // 🛡️ THE ZERO-BASE GUARD
     if (prevMonthTotal === 0 && thisMonthTotal > 0) {
-        diffPercent = 100; // It's technically a 100% increase from nothing
+        diffPercent = 100; 
         comparisonMessage = "First month of tracking!";
     } else if (prevMonthTotal === 0 && thisMonthTotal === 0) {
         diffPercent = 0;
@@ -380,12 +400,13 @@ export const getSpendingOverview = async (req, res) => {
         comparisonMessage = `${diffPercent.toFixed(1)}% ${diffPercent >= 0 ? 'more' : 'less'} than last month`;
     }
 
+    // Now chartData is defined and the response will succeed
     res.json({
       timeframe,
       comparison: {
         percentage: diffPercent.toFixed(1),
         isIncrease: diffPercent >= 0,
-        message: comparisonMessage // Extra context for the Frontend
+        message: comparisonMessage 
       },
       chartData
     });
