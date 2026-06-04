@@ -10,21 +10,25 @@ export const xpressWebhook = async (req, res) => {
       throw new Error("req.rawBody is undefined. Check your middleware order in app.js.");
     }
 
-    const signature = req.headers['x-xpress-signature'] || req.headers['X-XPRESS-SIGNATURE'];
+    const signature = req.headers['x-xpresswallet-signature'] || req.headers['X-XPRESSWALLET-SIGNATURE'];
     const secret = process.env.XPRESS_WEBHOOK_SECRET;
 
-    const hmac = crypto.createHmac('sha512', secret);
-    const expectedSignature = hmac.update(req.rawBody).digest('hex');
+    const hmac256 = crypto.createHmac('sha256', secret);
+    const expected256 = hmac256.update(req.rawBody).digest('hex');
+
+    const hmac512 = crypto.createHmac('sha512', secret);
+    const expected512 = hmac512.update(req.rawBody).digest('hex');
 
     console.log("=== Webhook Verification Debug ===");
     console.log("Headers received:", JSON.stringify(req.headers));
     console.log("Signature received:", signature);
-    console.log("Expected signature:", expectedSignature);
+    console.log("Expected SHA256:", expected256);
+    console.log("Expected SHA512:", expected512);
     console.log("Secret key used (truncated):", secret ? secret.slice(0, 15) + "..." : "undefined");
     console.log("Raw body string:", req.rawBody.toString());
     console.log("==================================");
 
-    if (signature !== expectedSignature) {
+    if (signature !== expected256 && signature !== expected512) {
       console.error("❌ Step 2: Signature Mismatch");
       return res.status(401).send('Invalid signature');
     }
@@ -33,13 +37,16 @@ export const xpressWebhook = async (req, res) => {
     const { event, data } = payload;
     console.log(`🔔 Step 3: Verified Event - ${event}`);
 
-    if (event === 'transaction.successful') {
-      const { reference, amount, customer_id, type } = data;
+    if (event === 'account_funded' || event === 'customer_wallet_credited') {
+      const isAccountFunded = event === 'account_funded';
+      const reference = data.reference;
+      const amount = Number(data.amount);
+      const customerId = isAccountFunded ? data.userId : data.customer_id;
 
       // Check if wallet exists first
-      const wallet = await Wallet.findOne({ xpressCustomerId: customer_id });
+      const wallet = await Wallet.findOne({ xpressCustomerId: customerId });
       if (!wallet) {
-        console.error(`❌ Step 4: Wallet NOT found for ID: ${customer_id}`);
+        console.error(`❌ Step 4: Wallet NOT found for ID: ${customerId}`);
         return res.status(404).send('Wallet not found');
       }
 
@@ -50,24 +57,22 @@ export const xpressWebhook = async (req, res) => {
       if (!transaction) {
         transaction = new Transaction({
           user: wallet.user, 
-          type: type, // This will be 'credit' or 'debit' from Xpress data
-          amount: Number(amount),
-          purpose: type === 'credit' ? 'deposit' : 'withdrawal', // Map to purpose
+          type: 'credit',
+          amount: amount,
+          purpose: 'deposit',
           reference: reference,
           status: 'successful'
         });
         await transaction.save();
         console.log(`📝 Transaction record created for ${wallet.accountName}`);
-      }
-
-      // Update Balance
-      if (type === 'credit') {
-        wallet.balance += Number(amount);
+        
+        // Update Balance
+        wallet.balance += amount;
+        await wallet.save();
+        console.log(`💰 Step 6: Balance Updated! New Balance: ${wallet.balance}`);
       } else {
-        wallet.balance -= Number(amount);
+        console.log(`🔄 Transaction ${reference} already processed`);
       }
-      await wallet.save();
-      console.log(`💰 Step 6: Balance Updated! New Balance: ${wallet.balance}`);
     }
 
     res.status(200).send('Webhook Processed');
