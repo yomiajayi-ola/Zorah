@@ -3,6 +3,7 @@ import KYC from "../models/Kyc.js";
 import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
 import axios from "axios";
+const XPRESS_BASE_URL = process.env.XPRESS_WALLET_API_URL || "https://payment.xpress-wallet.com/api/v1";
 
 // ✅ submit KYC with multer support
 export const submitKyc = async (req, res) => {
@@ -40,7 +41,7 @@ export const submitKyc = async (req, res) => {
 
     // 5. Call Xpress API
     const walletResponse = await axios.post(
-      "https://payment.xpress-wallet.com/api/v1/wallet",
+      `${XPRESS_BASE_URL}/wallet`,
       walletPayload,
       {
         headers: {
@@ -152,7 +153,7 @@ export const upgradeKYC = async (req, res) => {
     const tierString = `TIER_${requestedTier}`;
     
     await axios.put(
-      `https://payment.xpress-wallet.com/api/v1/customer/${wallet.xpressCustomerId}`,
+      `${XPRESS_BASE_URL}/customer/${wallet.xpressCustomerId}`,
       {
         tier: tierString,
         metadata: {

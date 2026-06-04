@@ -5,7 +5,7 @@ import express from "express";
 import path from 'path';
 import bodyParser from 'body-parser';
 import admin from "./config/firebase.js";
-// import { API_URL, DB_KEY } from '@env';
+import { patchMerchantNameAdmin } from './services/walletService.js'; // 🚀 Line 7 is perfect
 import cors from "cors";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -15,7 +15,7 @@ import notificationRoutes from "./routes/notification.routes.js"
 import savingsRoutes from "./routes/savings.routes.js";
 import esusuRoutes from "./routes/esusu.routes.js"
 import esusuPayoutRoutes from "./routes/esusuPayoutRoutes.js";
-import walletRoutes from "./routes/walletRoutes.js"; // <-- Note: NO 'src' here
+import walletRoutes from "./routes/walletRoutes.js"; 
 import incomeRoutes from "./routes/income.routes.js";
 import categoryRoutes from './routes/category.routes.js';
 import kycRoutes from "./routes/kycRoutes.js";
@@ -24,17 +24,13 @@ import voiceRoutes from "./routes/voice.routes.js"
 import webhookRoutes from "./routes/webhook.routes.js"
 import billRoutes from "./routes/bills.routes.js";
 import "./cron/billAlerts.js";
-// import Config from "react-native-config";
-
-// Access variables like this:
-// const api = Config.API_URL;
-
 
 console.log("Firebase Initialized", admin.apps.length)
 
 const app = express();
 
-app.use('/api/webhooks/xpress', express.raw({ type: 'application/json' }), (req, res, next) => {
+// Webhook raw body middleware
+app.use('/api/webhooks/xpress-wallet', express.raw({ type: 'application/json' }), (req, res, next) => {
   req.rawBody = req.body; 
   next();
 });
@@ -49,29 +45,6 @@ app.use((err, req, res, next) => {
   next();
 });
 app.use(cors());
-
-// app.use('/api/payment/webhook', bodyParser.json({
-//   // We add a `verify` function to store the raw body buffer.
-//   verify: (req, res, buf) => {
-//       if (buf && buf.length) {
-//           // Save the raw body buffer to a property on the request object.
-//           // This buffer is what the payment gateway uses to calculate its signature.
-//           req.rawBody = buf; 
-//       }
-//   }
-// }));
-
-// app.use(express.json({
-//   verify: (req, res, buf) => {
-//     // Check if the request is going to the webhook path
-//     if (req.originalUrl.startsWith('/api/webhooks')) {
-//       req.rawBody = buf; // Store the raw buffer for signature verification
-//     }
-//   }
-// }));
-
-
-
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -90,31 +63,27 @@ app.use("/api/voice", voiceRoutes);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/bills", billRoutes);
 
-
-
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 app.use('/images', express.static('public/images'));
 
-
-
-
-// Database
+// 🗄️ Database Connection
 connectDB();
 
+// 🚀 MOUNTED FIX HERE: Execute the admin patch when server boots up
+// patchMerchantNameAdmin();
+
+// Basic Checks & Testing Endpoints
 app.get("/api", (req, res) => {
     res.send("Zorah API is running");
-  });
+});
   
-  app.get('/api/v1/health', (req, res) => {
+app.get('/api/v1/health', (req, res) => {
     res.json({ status: 'Zorah backend is live 🚀' });
-  });
+});
 
-  // server.js (put this right after your middleware)
 app.post("/api/test-route", (req, res) => {
     res.json({ message: "Test route works!" });
 });
   
-
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
- 

@@ -4,8 +4,9 @@ import Wallet from "../models/Wallet.js";
 import KYC from "../models/Kyc.js";
 import Transaction from "../models/Transaction.js";
 import { v4 as uuidv4 } from "uuid";
-import axios from "axios";
 import mongoose from "mongoose";
+import axios from "axios";
+const XPRESS_BASE_URL = process.env.XPRESS_WALLET_API_URL || "https://payment.xpress-wallet.com/api/v1";
 
 
 const getUserWallet = async (userId) => {
@@ -31,7 +32,7 @@ export const depositFunds = async (req, res) => {
       const reference = uuidv4();
   
       const response = await axios.post(
-        "https://payment.xpress-wallet.com/api/v1/wallet/credit",
+        `${XPRESS_BASE_URL}/wallet/credit`,
         {
           amount,
           reference,
@@ -70,7 +71,7 @@ export const withdrawFunds = async (req, res) => {
       const wallet = await getUserWallet(req.user.id);
   
       const response = await axios.post(
-        "https://payment.xpress-wallet.com/api/v1/wallet/debit",
+        `${XPRESS_BASE_URL}/wallet/debit`,
         {
           customerId: wallet.xpressCustomerId,
           amount,
@@ -108,7 +109,7 @@ export const getWalletBalance = async (req, res) => {
     
     // Fetch directly from Xpress to get that ₦2,000 you see in the dashboard
     const response = await axios.get(
-      `https://payment.xpress-wallet.com/api/v1/wallet/${wallet.customerId}/balance`,
+      `${XPRESS_BASE_URL}/wallet/${wallet.customerId}/balance`,
       { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
     );
 
@@ -125,88 +126,153 @@ export const getWalletBalance = async (req, res) => {
 };
 
 export const transferToCustomer = async (req, res) => {
+  const session = await mongoose.startSession();
+  let isApiSuccessful = false;
+  let apiResponseData = null;
+
   try {
+    session.startTransaction();
+
     const { amount, toCustomerId, purpose } = req.body;
     const fromUserId = req.user.id; // Use id from auth middleware
+    const transferAmount = Number(amount);
 
-    // 1. Fetch Sender's Wallet Details
-    const fromWallet = await Wallet.findOne({ user: fromUserId });
+    if (!transferAmount || transferAmount <= 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "Invalid amount specified." });
+    }
+
+    // 1. Fetch Sender's Wallet Details (within transaction session)
+    const fromWallet = await Wallet.findOne({ user: fromUserId }).session(session);
     if (!fromWallet) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ message: "Sender wallet not found." });
     }
 
-    // 2. Fetch Recipient's Wallet Details (To update them locally later)
-    const toWallet = await Wallet.findOne({ xpressCustomerId: toCustomerId });
+    // 2. Fetch Recipient's Wallet Details (within transaction session)
+    const toWallet = await Wallet.findOne({ xpressCustomerId: toCustomerId }).session(session);
     if (!toWallet) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ message: "Recipient wallet not found in Zorah records." });
     }
 
     // 3. Local Balance Check
-    if (fromWallet.balance < Number(amount)) {
+    if (fromWallet.balance < transferAmount) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(400).json({ message: "Insufficient funds in your Zorah wallet." });
     }
 
     // 4. Xpress Wallet API Call
+    // NOTE: External API call cannot be rolled back, so if it fails, we safely abort the MongoDB transaction.
     const agent = new https.Agent({ rejectUnauthorized: false });
-    const xpressResponse = await axios.post(
-      'https://payment.xpress-wallet.com/api/v1/transfer/wallet',
-      {
-        amount: Number(amount),
-        fromCustomerId: fromWallet.xpressCustomerId,
-        toCustomerId: toCustomerId 
-      },
-      {
-        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
-        httpsAgent: agent
-      }
-    );
-
-    if (xpressResponse.data.status) {
-      const transferData = xpressResponse.data.data;
-      const transferAmount = Number(amount);
-
-      // 5. UPDATE SENDER: Debit balance and record transaction
-      fromWallet.balance -= transferAmount;
-      await fromWallet.save();
-
-      await Transaction.create({
-        user: fromUserId,
-        type: 'debit',
-        amount: transferAmount,
-        purpose: purpose || 'transfer',
-        reference: transferData.reference,
-        status: 'successful',
-        metadata: xpressResponse.data
-      });
-
-      // 6. UPDATE RECIPIENT: Credit balance and record transaction
-      toWallet.balance += transferAmount;
-      await toWallet.save();
-
-      await Transaction.create({
-        user: toWallet.user,
-        type: 'credit',
-        amount: transferAmount,
-        purpose: 'transfer', // Changed from 'transfer_received' to 'transfer' to match your enum
-        reference: `${transferData.reference}-REC`,
-        status: 'successful',
-        metadata: { senderName: fromWallet.accountName }
-      });
-
-      console.log(`✅ Transfer Successful: ${fromWallet.accountName} -> ${toWallet.accountName}`);
-
-      return res.status(200).json({
-        success: true,
-        message: `Successfully transferred ₦${transferAmount} to ${toWallet.accountName}`,
-        reference: transferData.reference
+    let xpressResponse;
+    try {
+      xpressResponse = await axios.post(
+        `${XPRESS_BASE_URL}/transfer/wallet`,
+        {
+          amount: transferAmount,
+          fromCustomerId: fromWallet.xpressCustomerId,
+          toCustomerId: toCustomerId 
+        },
+        {
+          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+          httpsAgent: agent
+        }
+      );
+    } catch (apiError) {
+      console.error("Xpress Transfer API Network Error:", apiError.response?.data || apiError.message);
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(502).json({
+        message: "External transfer service unavailable.",
+        error: apiError.response?.data?.message || apiError.message
       });
     }
 
+    if (!xpressResponse.data.status) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        message: "Transfer declined by payment gateway.",
+        error: xpressResponse.data.message
+      });
+    }
+
+    // Mark that API succeeded, so if DB writes fail afterwards we know we have a desync.
+    isApiSuccessful = true;
+    apiResponseData = xpressResponse.data;
+    const transferData = apiResponseData.data;
+
+    // 5. UPDATE SENDER: Debit balance and record transaction (within transaction session)
+    fromWallet.balance -= transferAmount;
+    await fromWallet.save({ session });
+
+    await Transaction.create([{
+      user: fromUserId,
+      type: 'debit',
+      amount: transferAmount,
+      purpose: purpose || 'transfer',
+      reference: transferData.reference,
+      status: 'successful',
+      metadata: apiResponseData
+    }], { session });
+
+    // 6. UPDATE RECIPIENT: Credit balance and record transaction (within transaction session)
+    toWallet.balance += transferAmount;
+    await toWallet.save({ session });
+
+    await Transaction.create([{
+      user: toWallet.user,
+      type: 'credit',
+      amount: transferAmount,
+      purpose: 'transfer',
+      reference: `${transferData.reference}-REC`,
+      status: 'successful',
+      metadata: { senderName: fromWallet.accountName }
+    }], { session });
+
+    // Commit all MongoDB changes atomically
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(`✅ Transactional Transfer Successful: ${fromWallet.accountName} -> ${toWallet.accountName}`);
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully transferred ₦${transferAmount} to ${toWallet.accountName}`,
+      reference: transferData.reference
+    });
+
   } catch (error) {
-    console.error("Transfer Error:", error.response?.data || error.message);
-    res.status(500).json({ 
-      message: "Transfer failed", 
-      error: error.response?.data?.message || error.message 
+    console.error("Transfer Controller DB/Commit Error:", error.message);
+    
+    // Rollback DB changes if session is still active
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    session.endSession();
+
+    if (isApiSuccessful) {
+      // CRITICAL WARNING: External payment provider transferred the money, but our database failed to log/commit.
+      // This is a ledger inconsistency that requires manual reconciliation or a secondary queue job.
+      console.error(
+        `🚨 CRITICAL LEDGER DESYNC: Xpress Wallet transfer succeeded but local MongoDB transaction failed to commit. ` +
+        `API Response Reference: ${apiResponseData?.data?.reference}. Error: ${error.message}`
+      );
+      
+      return res.status(500).json({
+        message: "Transfer succeeded at gateway but failed to record locally. Support has been notified.",
+        reference: apiResponseData?.data?.reference
+      });
+    }
+
+    return res.status(500).json({ 
+      message: "Internal transfer processing error", 
+      error: error.message 
     });
   }
 };
@@ -250,7 +316,6 @@ export const getOverview = async (req, res) => {
       Transaction.find({ user: userId }).sort({ createdAt: -1 }).limit(5)
     ]);
 
-    // 2. Handle cases where the wallet hasn't been created yet
     if (!wallet) {
       return res.status(200).json({ 
         success: true,
@@ -258,9 +323,8 @@ export const getOverview = async (req, res) => {
         message: "Complete KYC to activate your wallet." 
       });
     }
-
-    const chartData = transactions.reduce((acc, curr) => {
-      const date = curr.createdAt.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+    const chartData = recentTransactions.reduce((acc, curr) => {
+      const date = curr.createdAt.toISOString().split('T')[0];
       const existing = acc.find(item => item.date === date);
       
       if (existing) {
@@ -274,11 +338,10 @@ export const getOverview = async (req, res) => {
       return acc;
     }, []);
 
-    // 3. Return the data directly from your MongoDB
     res.status(200).json({
       success: true,
       account: {
-        balance: wallet.balance, // Reading directly from your DB
+        balance: wallet.balance,
         currency: wallet.currency || "NGN",
         accountNumber: wallet.accountNumber,
         accountName: wallet.accountName,
@@ -290,7 +353,8 @@ export const getOverview = async (req, res) => {
         status: kyc?.walletStatus || "pending",
         currentTier: kyc?.tier || 1
       },
-      recentTransactions, // These will show the 'successful' status after your webhook test
+      recentTransactions,
+      chartData, // Included safe computed data
       userSettings: { 
         biometricEnabled: user?.biometricEnabled || false
       }
