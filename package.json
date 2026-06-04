@@ -7,7 +7,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node --require dotenv/config src/app.js",
-    "dev": "nodemon --exec 'node --require dotenv/config' src/app.js"
+    "dev": "nodemon --exec 'node --require dotenv/config' src/app.js",
+    "start:staging": "node --require dotenv/config src/app.js dotenv_config_path=.env.staging",
+    "start:prod": "node --require dotenv/config src/app.js dotenv_config_path=.env.production",
+    "dev:staging": "nodemon --exec 'node --require dotenv/config' src/app.js dotenv_config_path=.env.staging",
+    "dev:prod": "nodemon --exec 'node --require dotenv/config' src/app.js dotenv_config_path=.env.production"
   },
   "keywords": [],
   "author": "",
