@@ -26,6 +26,7 @@ const userSchema = new mongoose.Schema({
     enum: ["unverified", "pending", "verified", "rejected"],
     default: "unverified",
   },
+  walletId: { type: String }, // Providus Bank Account Number linked from Xpress Wallet
 
   onboarding: {
     // Existing fields...

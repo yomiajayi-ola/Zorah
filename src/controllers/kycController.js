@@ -39,21 +39,74 @@ export const submitKyc = async (req, res) => {
       }
     };
 
-    // 5. Call Xpress API
-    const walletResponse = await axios.post(
-      `${XPRESS_BASE_URL}/wallet`,
-      walletPayload,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    // 5. Call Xpress API with Recovery Fallback
+    let xpressWallet;
+    let xpressCustomer;
 
-    // ✅ FIX: Define both variables from the response data
-    const xpressWallet = walletResponse.data.wallet;
-    const xpressCustomer = walletResponse.data.customer; 
+    try {
+      const walletResponse = await axios.post(
+        `${XPRESS_BASE_URL}/wallet`,
+        walletPayload,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      xpressWallet = walletResponse.data.wallet;
+      xpressCustomer = walletResponse.data.customer;
+    } catch (apiError) {
+      const errorMessage = apiError.response?.data?.message || apiError.message;
+      
+      if (errorMessage === "Customer already exist.") {
+        console.log(`[KYC Recovery] Customer already exists on Xpress Wallet. Attempting recovery for user email: ${userRecord.email}`);
+        
+        // Fetch all customers from Xpress Wallet to locate the existing one
+        const customersResponse = await axios.get(
+          `${XPRESS_BASE_URL}/customer?perPage=1000`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+            },
+          }
+        );
+        
+        const targetEmail = userRecord.email.toLowerCase();
+        const targetPhone = phoneNumber || userRecord.phoneNumber;
+        
+        const matchedCustomer = customersResponse.data.customers?.find(
+          (c) => 
+            (c.email && c.email.toLowerCase() === targetEmail) ||
+            (c.bvn && bvn && c.bvn === bvn) ||
+            (c.phoneNumber && targetPhone && (
+              c.phoneNumber === targetPhone ||
+              c.phoneNumber === targetPhone.replace(/^\+?234/, '0') ||
+              c.phoneNumber === targetPhone.replace(/^\+?0?/, '234') ||
+              targetPhone === c.phoneNumber.replace(/^\+?234/, '0') ||
+              targetPhone === c.phoneNumber.replace(/^\+?0?/, '234')
+            ))
+        );
+        
+        if (matchedCustomer) {
+          console.log(`[KYC Recovery] Match found on Xpress Wallet: ID=${matchedCustomer.id}, Acct=${matchedCustomer.accountNumber}`);
+          xpressCustomer = {
+            id: matchedCustomer.id
+          };
+          xpressWallet = {
+            id: matchedCustomer.walletId,
+            accountNumber: matchedCustomer.accountNumber,
+            accountName: matchedCustomer.accountName || `${matchedCustomer.firstName} ${matchedCustomer.lastName}`,
+            customerId: matchedCustomer.id
+          };
+        } else {
+          console.error(`[KYC Recovery] Customer already exists error returned but could not find a matching record in Xpress Wallet list for email: ${userRecord.email}`);
+          throw apiError;
+        }
+      } else {
+        throw apiError;
+      }
+    } 
 
     // 6. Save KYC record
     const kyc = await KYC.create({
