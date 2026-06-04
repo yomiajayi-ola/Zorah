@@ -16,6 +16,14 @@ export const xpressWebhook = async (req, res) => {
     const hmac = crypto.createHmac('sha512', secret);
     const expectedSignature = hmac.update(req.rawBody).digest('hex');
 
+    console.log("=== Webhook Verification Debug ===");
+    console.log("Headers received:", JSON.stringify(req.headers));
+    console.log("Signature received:", signature);
+    console.log("Expected signature:", expectedSignature);
+    console.log("Secret key used (truncated):", secret ? secret.slice(0, 15) + "..." : "undefined");
+    console.log("Raw body string:", req.rawBody.toString());
+    console.log("==================================");
+
     if (signature !== expectedSignature) {
       console.error("❌ Step 2: Signature Mismatch");
       return res.status(401).send('Invalid signature');

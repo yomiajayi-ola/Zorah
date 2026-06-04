@@ -23,6 +23,20 @@ export const submitKyc = async (req, res) => {
     // 3. Get ONLY the extra info from the request body (NIN, BVN, etc.)
     const { tier, dateOfBirth, phoneNumber, address, bvn, nin } = req.body;
 
+    // Check if another user already has the same BVN or NIN locally
+    if (bvn) {
+      const bvnExists = await KYC.findOne({ bvn });
+      if (bvnExists && bvnExists.user.toString() !== userId.toString()) {
+        return res.status(400).json({ message: "This BVN is already registered with another account." });
+      }
+    }
+    if (nin) {
+      const ninExists = await KYC.findOne({ nin });
+      if (ninExists && ninExists.user.toString() !== userId.toString()) {
+        return res.status(400).json({ message: "This NIN is already registered with another account." });
+      }
+    }
+
     // 4. Construct the Xpress Payload using DB values for Names and Email
     const walletPayload = {
       firstName: userRecord.firstName, // 👈 Picked from Signup data
@@ -90,6 +104,16 @@ export const submitKyc = async (req, res) => {
         
         if (matchedCustomer) {
           console.log(`[KYC Recovery] Match found on Xpress Wallet: ID=${matchedCustomer.id}, Acct=${matchedCustomer.accountNumber}`);
+          
+          // Prevent linking the same Xpress Customer Wallet to a different Zorah user
+          const alreadyLinked = await Wallet.findOne({ xpressCustomerId: matchedCustomer.id });
+          if (alreadyLinked && alreadyLinked.user.toString() !== userId.toString()) {
+            console.error(`[KYC Recovery] Customer ${matchedCustomer.id} is already linked to Zorah user ${alreadyLinked.user}`);
+            return res.status(400).json({ 
+              message: "This identity/BVN is already registered with another Zorah account. Please log into your existing account or contact support." 
+            });
+          }
+
           xpressCustomer = {
             id: matchedCustomer.id
           };
