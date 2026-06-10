@@ -10,7 +10,7 @@ const router = express.Router();
 router.post("/add-bill", protect, addBill);
 router.get("/", protect, getBills);
 router.patch("/:id/pay", protect, markAsPaid);
-router.patch("/bills/:billId", protect, updateBill);
+router.patch("/:billId", protect, updateBill);
 
 // ====== THE BACKDOOR ROUTE ======
 // This allows you to manually trigger the "7 days before" and "Overdue" logic

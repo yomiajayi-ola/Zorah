@@ -13,11 +13,14 @@ import { systemPrompt } from "./prompt.js";
 import User from "../models/User.js"; // Required for usage tracking
 
 // 🔄 Retry Logic Wrapper for Gemini API calls
-async function callGeminiWithRetry(ai, modelName, payload) {
+async function callGeminiWithRetry(ai, modelName, systemPrompt, payload) {
     const maxRetries = 3;
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const model = ai.getGenerativeModel({ model: modelName });
+            const model = ai.getGenerativeModel({ 
+                model: modelName,
+                systemInstruction: systemPrompt
+            });
             const result = await model.generateContent(payload);
             return result;
         } catch (error) {
@@ -53,10 +56,6 @@ export const aiAssistant = async (req, res) => {
         console.log("DEBUG: Data sent to Gemini ->", JSON.stringify(financialData, null, 2));
 
         const payload = {
-            systemInstruction: {
-                role: "system",
-                parts: [{ text: systemPrompt }]
-            },
             contents: [
                 {
                     role: "user",
@@ -78,7 +77,7 @@ export const aiAssistant = async (req, res) => {
         };
 
         // 3. Generate response
-        const response = await callGeminiWithRetry(ai, "gemini-2.0-flash", payload);
+        const response = await callGeminiWithRetry(ai, "models/gemini-2.5-flash", systemPrompt, payload);
 
         let replyText = response?.response?.text() || "";
         let responseStatus = "success";

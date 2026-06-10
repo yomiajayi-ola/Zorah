@@ -15,7 +15,7 @@ const TIPS_USER_PROMPT =
             const financialData = await getFinancialData("general-advice", userId);
     
             const model = ai.getGenerativeModel({ 
-                model: "gemini-2.0-flash", 
+                model: "models/gemini-2.5-flash", 
                 systemInstruction: systemPrompt 
             });
     

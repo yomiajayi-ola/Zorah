@@ -90,16 +90,7 @@ export const submitKyc = async (req, res) => {
         const targetPhone = phoneNumber || userRecord.phoneNumber;
         
         const matchedCustomer = customersResponse.data.customers?.find(
-          (c) => 
-            (c.email && c.email.toLowerCase() === targetEmail) ||
-            (c.bvn && bvn && c.bvn === bvn) ||
-            (c.phoneNumber && targetPhone && (
-              c.phoneNumber === targetPhone ||
-              c.phoneNumber === targetPhone.replace(/^\+?234/, '0') ||
-              c.phoneNumber === targetPhone.replace(/^\+?0?/, '234') ||
-              targetPhone === c.phoneNumber.replace(/^\+?234/, '0') ||
-              targetPhone === c.phoneNumber.replace(/^\+?0?/, '234')
-            ))
+          (c) => c.email && c.email.toLowerCase() === targetEmail
         );
         
         if (matchedCustomer) {

@@ -7,7 +7,7 @@ const router = express.Router();
 //  for all subcategories
 router.get('/subcategories', protect, getAllSubcategories);
 
-router.get('/', getCategoriesByType);
-router.get("/by-type", protect, getAllCategories);
+router.get('/', protect, getAllCategories);
+router.get("/by-type", protect, getCategoriesByType);
 
 export default router;

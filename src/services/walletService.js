@@ -1,3 +1,4 @@
+import https from 'https';
 import Wallet from "../models/Wallet.js";
 import Transaction from "../models/Transaction.js";
 import axios from "axios";
@@ -17,15 +18,142 @@ export const creditWallet = async (userId, amount, purpose, reference, metadata 
 
 // /services/walletService.js
 export const debitWallet = async (userId, amount, purpose, reference) => {
-  // Since we are using Xpress Wallet, the 'true' balance check happens 
-  // at the API level. This local function creates the matching record.
+  const poolCustomerId = process.env.XPRESS_POOL_CUSTOMER_ID;
+  if (!poolCustomerId) {
+    console.warn("⚠️ [debitWallet] XPRESS_POOL_CUSTOMER_ID is not configured. Falling back to local-only mock debit.");
+    const wallet = await Wallet.findOne({ user: userId });
+    if (wallet) {
+      wallet.balance -= Number(amount);
+      await wallet.save();
+    }
+    return await Transaction.create({
+      user: userId,
+      type: "debit",
+      purpose, 
+      amount: Number(amount),
+      reference,
+      status: "successful"
+    });
+  }
+
+  const wallet = await Wallet.findOne({ user: userId });
+  if (!wallet) {
+    throw new Error("Wallet not found for this user.");
+  }
+
+  const debitAmount = Number(amount);
+  if (!debitAmount || debitAmount <= 0) {
+    throw new Error("Invalid transfer amount.");
+  }
+
+  // 1. Call Xpress API to transfer from customer to pool wallet
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  let xpressResponse;
+  try {
+    xpressResponse = await axios.post(
+      `${XPRESS_BASE_URL}/transfer/wallet`,
+      {
+        amount: debitAmount,
+        fromCustomerId: wallet.xpressCustomerId,
+        toCustomerId: poolCustomerId
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        httpsAgent: agent
+      }
+    );
+  } catch (apiError) {
+    console.error("Pool Debit API Error:", apiError.response?.data || apiError.message);
+    throw new Error(apiError.response?.data?.message || "Custodial transfer service unavailable.");
+  }
+
+  if (!xpressResponse.data.status) {
+    throw new Error(xpressResponse.data.message || "Custodial transfer declined.");
+  }
+
+  // 2. Update local wallet balance and create Transaction
+  wallet.balance -= debitAmount;
+  await wallet.save();
+
+  const transferData = xpressResponse.data.data;
   return await Transaction.create({
     user: userId,
     type: "debit",
-    purpose, // e.g., 'savings_contribution'
-    amount,
-    reference,
-    status: "successful" // Usually set to successful after the API confirms
+    purpose, 
+    amount: debitAmount,
+    reference: transferData?.reference || reference,
+    status: "successful",
+    metadata: xpressResponse.data
+  });
+};
+
+export const creditWalletFromPool = async (userId, amount, purpose, reference) => {
+  const poolCustomerId = process.env.XPRESS_POOL_CUSTOMER_ID;
+  if (!poolCustomerId) {
+    console.warn("⚠️ [creditWalletFromPool] XPRESS_POOL_CUSTOMER_ID is not configured. Falling back to local-only mock credit.");
+    const wallet = await Wallet.findOne({ user: userId });
+    if (wallet) {
+      wallet.balance += Number(amount);
+      await wallet.save();
+    }
+    return await Transaction.create({
+      user: userId,
+      type: "credit",
+      purpose, 
+      amount: Number(amount),
+      reference,
+      status: "successful"
+    });
+  }
+
+  const wallet = await Wallet.findOne({ user: userId });
+  if (!wallet) {
+    throw new Error("Wallet not found for this user.");
+  }
+
+  const creditAmount = Number(amount);
+  if (!creditAmount || creditAmount <= 0) {
+    throw new Error("Invalid transfer amount.");
+  }
+
+  // 1. Call Xpress API to transfer from pool wallet back to customer
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  let xpressResponse;
+  try {
+    xpressResponse = await axios.post(
+      `${XPRESS_BASE_URL}/transfer/wallet`,
+      {
+        amount: creditAmount,
+        fromCustomerId: poolCustomerId,
+        toCustomerId: wallet.xpressCustomerId
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        httpsAgent: agent
+      }
+    );
+  } catch (apiError) {
+    console.error("Pool Credit API Error:", apiError.response?.data || apiError.message);
+    throw new Error(apiError.response?.data?.message || "Custodial transfer service unavailable.");
+  }
+
+  if (!xpressResponse.data.status) {
+    throw new Error(xpressResponse.data.message || "Custodial transfer declined.");
+  }
+
+  // 2. Update local wallet balance and create Transaction
+  wallet.balance += creditAmount;
+  await wallet.save();
+
+  const transferData = xpressResponse.data.data;
+  return await Transaction.create({
+    user: userId,
+    type: "credit",
+    purpose, 
+    amount: creditAmount,
+    reference: transferData?.reference || reference,
+    status: "successful",
+    metadata: xpressResponse.data
   });
 };
 

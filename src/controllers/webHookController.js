@@ -70,6 +70,15 @@ export const xpressWebhook = async (req, res) => {
         wallet.balance += amount;
         await wallet.save();
         console.log(`💰 Step 6: Balance Updated! New Balance: ${wallet.balance}`);
+      } else if (transaction.status === 'pending') {
+        transaction.status = 'successful';
+        await transaction.save();
+        console.log(`📝 Pending transaction ${reference} updated to successful`);
+
+        // Update Balance
+        wallet.balance += amount;
+        await wallet.save();
+        console.log(`💰 Step 6: Balance Updated! New Balance: ${wallet.balance}`);
       } else {
         console.log(`🔄 Transaction ${reference} already processed`);
       }

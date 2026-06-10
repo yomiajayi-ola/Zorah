@@ -83,12 +83,13 @@ export const withdrawFunds = async (req, res) => {
         }
       );
   
-      const trx = await createTransaction({
-        userId: req.user.id,
+      const trx = await Transaction.create({
+        user: req.user.id,
         type: "debit",
         amount,
         purpose: "withdrawal",
-        reference: response.data?.data?.reference,
+        reference: response.data?.data?.reference || uuidv4(),
+        status: "pending",
         metadata: response.data,
       });
   
@@ -106,14 +107,17 @@ export const withdrawFunds = async (req, res) => {
 export const getWalletBalance = async (req, res) => {
   try {
     const wallet = await Wallet.findOne({ user: req.user.id });
+    if (!wallet) {
+      return res.status(200).json({ success: true, balance: 0, hasWallet: false, message: "KYC not completed. No wallet exists yet." });
+    }
     
-    // Fetch directly from Xpress to get that ₦2,000 you see in the dashboard
+    // Fetch directly from Xpress using the customer endpoint
     const response = await axios.get(
-      `${XPRESS_BASE_URL}/wallet/${wallet.customerId}/balance`,
+      `${XPRESS_BASE_URL}/customer/${wallet.xpressCustomerId}`,
       { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
     );
 
-    const liveBalance = response.data.data.availableBalance;
+    const liveBalance = response.data.customer.availableBalance;
     
     // Update your local wallet balance field so it's not always 0
     wallet.balance = liveBalance;
@@ -121,7 +125,8 @@ export const getWalletBalance = async (req, res) => {
 
     return res.json({ success: true, balance: liveBalance });
   } catch (error) {
-    res.status(500).json({ message: "Could not fetch live balance" });
+    console.error("Fetch Balance Error:", error.response?.data || error.message);
+    res.status(500).json({ message: "Could not fetch live balance", error: error.message });
   }
 };
 
