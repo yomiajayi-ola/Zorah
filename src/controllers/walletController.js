@@ -77,7 +77,10 @@ export const withdrawFunds = async (req, res) => {
         const verifyRes = await axios.get(
           `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
           {
-            headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+            headers: { 
+              Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
           }
         );
         if (verifyRes.data?.status && verifyRes.data?.account?.accountName) {
@@ -102,7 +105,10 @@ export const withdrawFunds = async (req, res) => {
           narration: narration || "Withdrawal",
         },
         {
-          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+          headers: { 
+            Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          },
         }
       );
   
@@ -403,7 +409,10 @@ export const getBanksList = async (req, res) => {
     const response = await axios.get(
       `${XPRESS_BASE_URL}/transfer/banks`,
       {
-        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        headers: { 
+          Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
       }
     );
     return res.json({ success: true, banks: response.data?.data || [] });
@@ -423,7 +432,10 @@ export const verifyBankAccount = async (req, res) => {
     const response = await axios.get(
       `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
       {
-        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+        headers: { 
+          Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
       }
     );
 
