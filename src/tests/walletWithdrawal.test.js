@@ -57,10 +57,12 @@ async function runTests() {
 
     console.log(`Initial Balance: ₦${wallet.balance}`);
 
-    // Mock Axios POST for successful gateway simulation
+    // Mock Axios for successful gateway simulation
     const originalPost = axios.post;
+    const originalGet = axios.get;
     let lastUrlCalled = null;
     let lastPayloadCalled = null;
+    let lastGetUrlCalled = null;
 
     axios.post = async (url, payload, config) => {
       lastUrlCalled = url;
@@ -75,6 +77,23 @@ async function runTests() {
           }
         }
       };
+    };
+
+    axios.get = async (url, config) => {
+      lastGetUrlCalled = url;
+      if (url.includes('/transfer/account/details')) {
+        return {
+          data: {
+            status: true,
+            account: {
+              bankCode: '000013',
+              accountName: 'Beneficiary Name',
+              accountNumber: '0167421242'
+            }
+          }
+        };
+      }
+      return originalGet(url, config);
     };
 
     // --- TEST 1: SUCCESSFUL WITHDRAWAL ---
@@ -96,12 +115,15 @@ async function runTests() {
     console.log('Response Body:', res1.body);
     console.log('API URL Called:', lastUrlCalled);
     console.log('API Payload Sent:', JSON.stringify(lastPayloadCalled, null, 2));
+    console.log('API Get URL Called:', lastGetUrlCalled);
 
-    // Restore Axios post immediately
+    // Restore Axios post/get immediately
     axios.post = originalPost;
+    axios.get = originalGet;
 
     // Verify expectations
     const isCorrectUrl = lastUrlCalled?.endsWith('/transfer/bank/customer');
+    const isCorrectGetUrl = lastGetUrlCalled?.includes('/transfer/account/details');
     const hasCorrectPayload = 
       lastPayloadCalled?.amount === 2500 &&
       lastPayloadCalled?.sortCode === '000013' &&
@@ -115,6 +137,7 @@ async function runTests() {
     const isLoggedCorrectly = checkTx && checkTx.type === 'debit' && checkTx.purpose === 'withdrawal' && checkTx.amount === 2500;
 
     console.log(`\nVerification Results:`);
+    console.log(`- Is Account Verification Endpoint Called first? ${isCorrectGetUrl ? '✅' : '❌'}`);
     console.log(`- Is Customer Bank Transfer Endpoint Called? ${isCorrectUrl ? '✅' : '❌'}`);
     console.log(`- Is Payload Configured Properly? ${hasCorrectPayload ? '✅' : '❌'}`);
     console.log(`- Is Transaction Record Created? ${isLoggedCorrectly ? '✅' : '❌'}`);

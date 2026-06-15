@@ -70,6 +70,27 @@ export const withdrawFunds = async (req, res) => {
       const { amount, bankCode, accountNumber, accountName, narration } = req.body;
       const wallet = await getUserWallet(req.user.id);
   
+      // 1. Verify beneficiary account details (Name enquiry)
+      // This registers/verifies the account details with the gateway first (required step)
+      let resolvedAccountName = accountName;
+      try {
+        const verifyRes = await axios.get(
+          `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
+          {
+            headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+          }
+        );
+        if (verifyRes.data?.status && verifyRes.data?.account?.accountName) {
+          resolvedAccountName = verifyRes.data.account.accountName;
+        }
+      } catch (verifyErr) {
+        console.error("Account Verification Error:", verifyErr.response?.data || verifyErr.message);
+        return res.status(400).json({ 
+          message: verifyErr.response?.data?.message || "Could not verify beneficiary account details." 
+        });
+      }
+  
+      // 2. Perform Customer Bank Transfer
       const response = await axios.post(
         `${XPRESS_BASE_URL}/transfer/bank/customer`,
         {
@@ -77,7 +98,7 @@ export const withdrawFunds = async (req, res) => {
           amount,
           sortCode: bankCode,
           accountNumber,
-          accountName: accountName || wallet.accountName,
+          accountName: resolvedAccountName,
           narration: narration || "Withdrawal",
         },
         {
