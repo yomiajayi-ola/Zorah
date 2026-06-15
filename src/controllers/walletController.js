@@ -396,3 +396,85 @@ export const getOverview = async (req, res) => {
     });
   }
 };
+
+// 1. Bank List Fetcher
+export const getBanksList = async (req, res) => {
+  try {
+    const response = await axios.get(
+      `${XPRESS_BASE_URL}/transfer/banks`,
+      {
+        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+      }
+    );
+    return res.json({ success: true, banks: response.data?.data || [] });
+  } catch (err) {
+    return res.status(500).json({ message: err.response?.data?.message || err.message });
+  }
+};
+
+// 2. Standalone Name Enquiry
+export const verifyBankAccount = async (req, res) => {
+  try {
+    const { bankCode, accountNumber } = req.query;
+    if (!bankCode || !accountNumber) {
+      return res.status(400).json({ message: "bankCode and accountNumber are required query parameters." });
+    }
+
+    const response = await axios.get(
+      `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+      }
+    );
+
+    if (response.data?.status && response.data?.account) {
+      return res.json({ 
+        success: true, 
+        accountName: response.data.account.accountName,
+        account: response.data.account
+      });
+    } else {
+      return res.status(400).json({ message: "Could not resolve bank information." });
+    }
+  } catch (err) {
+    return res.status(500).json({ message: err.response?.data?.message || err.message });
+  }
+};
+
+// 3. P2P Recipient Lookup
+export const lookupRecipient = async (req, res) => {
+  try {
+    const { identifier } = req.query;
+    if (!identifier) {
+      return res.status(400).json({ message: "identifier is a required query parameter." });
+    }
+
+    // Find user by email or phone
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase().trim() },
+        { phoneNumber: identifier.trim() }
+      ]
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // Look up user's Wallet record
+    const wallet = await Wallet.findOne({ user: user._id });
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found for this user." });
+    }
+
+    return res.json({
+      success: true,
+      xpressCustomerId: wallet.xpressCustomerId,
+      accountName: wallet.accountName,
+      email: user.email,
+      name: `${user.firstName} ${user.lastName}`
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+};
