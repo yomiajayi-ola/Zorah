@@ -67,16 +67,18 @@ export const depositFunds = async (req, res) => {
 // Withdraw funds 
 export const withdrawFunds = async (req, res) => {
     try {
-      const { amount, bankCode, accountNumber } = req.body;
+      const { amount, bankCode, accountNumber, accountName, narration } = req.body;
       const wallet = await getUserWallet(req.user.id);
   
       const response = await axios.post(
-        `${XPRESS_BASE_URL}/wallet/debit`,
+        `${XPRESS_BASE_URL}/transfer/bank/customer`,
         {
           customerId: wallet.xpressCustomerId,
           amount,
-          bankCode,
+          sortCode: bankCode,
           accountNumber,
+          accountName: accountName || wallet.accountName,
+          narration: narration || "Withdrawal",
         },
         {
           headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
