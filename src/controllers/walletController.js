@@ -415,7 +415,7 @@ export const getBanksList = async (req, res) => {
         },
       }
     );
-    return res.json({ success: true, banks: response.data?.data || [] });
+    return res.json({ success: true, banks: response.data?.banks || [] });
   } catch (err) {
     return res.status(500).json({ message: err.response?.data?.message || err.message });
   }
