@@ -110,42 +110,85 @@ export const getProfile = async (req, res) => {
   res.json(user);
 };
 
-// Set or update a user's pin 
+// Set or update a user's pin
 export const setUserPin = async (req, res) => {
   try {
-    const { pin } = req.body;
-    if (!pin || pin.length < 4)
-      return res.status(400).json({ message: "PIN must be at least 4 digits" });
+    const { pin, currentPassword } = req.body;
 
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!pin || typeof pin !== "string" || !/^(\d{4}|\d{6})$/.test(pin)) {
+      return res.status(400).json({
+        status: "failed",
+        message: "PIN must be a string of exactly 4 or 6 numeric digits"
+      });
+    }
+
+    if (!currentPassword) {
+      return res.status(400).json({
+        status: "failed",
+        message: "Current password is required"
+      });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ status: "failed", message: "User not found" });
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ status: "failed", message: "Invalid current password" });
+    }
 
     const salt = await bcrypt.genSalt(10);
-    user.pin = await bcrypt.hash(pin, salt);
+    const hashedPin = await bcrypt.hash(pin, salt);
+
+    user.pinHash = hashedPin;
+    user.isPinSet = true;
     await user.save();
 
-    res.json({ message: "PIN set successfully" });
+    return res.status(200).json({
+      status: "success",
+      message: "PIN updated successfully",
+      data: { isPinSet: true }
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ status: "error", message: error.message });
   }
 };
 
-// Verify user's pin 
+// Verify user's pin
 export const verifyUserPin = async (req, res) => {
   try {
     const { pin } = req.body;
-    const user = await User.findById(req.user.id);
 
-    if (!user || !user.pin)
-      return res.status(404).json({ message: "No PIN found for this user" });
+    if (!pin) {
+      return res.status(400).json({ status: "failed", message: "PIN is required" });
+    }
 
-    const isMatch = await bcrypt.compare(pin, user.pin);
-    if (!isMatch)
-      return res.status(401).json({ message: "Incorrect PIN" });
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select("+pinHash");
 
-    res.json({ message: "PIN verified successfully" });
+    if (!user) {
+      return res.status(404).json({ status: "failed", message: "User not found" });
+    }
+
+    if (!user.isPinSet || !user.pinHash) {
+      return res.status(400).json({ status: "failed", message: "PIN not set" });
+    }
+
+    const isMatch = await bcrypt.compare(pin, user.pinHash);
+    if (!isMatch) {
+      return res.status(401).json({ status: "failed", message: "Invalid PIN" });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      verified: true
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ status: "error", message: error.message });
   }
 };
 
