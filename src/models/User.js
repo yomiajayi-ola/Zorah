@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
   pin: { type: String },
   biometricEnabled: { type: Boolean, default: false },
   
+  pinHash: { type: String, default: null, select: false },
+  isPinSet: { type: Boolean, default: false },
+  biometricsEnabled: { type: Boolean, default: false },
+  
   // Existing fields for OTP and KYC
   otp: { type: String },
   otpExpires: { type: Date },
