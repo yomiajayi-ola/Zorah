@@ -197,23 +197,38 @@ export const toggleBiometric = async (req, res) => {
   try {
     const { enabled } = req.body;
 
-    if (typeof enabled !== "boolean")
-      return res.status(400).json({ message: "Enabled must be true or false" });
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({
+        status: "failed",
+        message: "Enabled must be a boolean value"
+      });
+    }
 
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId);
 
+    if (!user) {
+      return res.status(404).json({
+        status: "failed",
+        message: "User not found"
+      });
+    }
+
+    user.biometricsEnabled = enabled;
     user.biometricEnabled = enabled;
     await user.save();
 
-    res.json({
-      message: `Biometric authentication ${enabled ? "enabled" : "disabled"} successfully`,
-      biometricEnabled: user.biometricEnabled,
+    return res.status(200).json({
+      status: "success",
+      message: "Biometrics setting updated successfully",
+      data: {
+        biometricsEnabled: user.biometricsEnabled
+      }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ status: "error", message: error.message });
   }
-}
+};
 
 // Reqquest Password reset 
 export const requestPasswordReset = async (req, res) => {
