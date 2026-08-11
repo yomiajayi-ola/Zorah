@@ -30,6 +30,7 @@
     "expo": "^54.0.13",
     "expo-server-sdk": "^4.0.0",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.6.2",
     "fetch": "^1.1.0",
     "firebase-admin": "^13.6.0",
     "fs": "^0.0.1-security",

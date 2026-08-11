@@ -23,6 +23,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import voiceRoutes from "./routes/voice.routes.js"
 import webhookRoutes from "./routes/webhook.routes.js"
 import billRoutes from "./routes/bills.routes.js";
+import { generalLimiter, authLimiter } from "./middlewares/securityMiddleware.js";
 import "./cron/billAlerts.js";
 
 console.log("Firebase Initialized", admin.apps.length)
@@ -46,8 +47,11 @@ app.use((err, req, res, next) => {
 });
 app.use(cors());
 
+// Apply rate limiting middleware
+app.use("/api", generalLimiter);
+
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/budgets", budgetRoutes);
 app.use("/api/notifications", notificationRoutes);
