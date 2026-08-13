@@ -26,7 +26,16 @@ import billRoutes from "./routes/bills.routes.js";
 import { generalLimiter, authLimiter } from "./middlewares/securityMiddleware.js";
 import "./cron/billAlerts.js";
 
-console.log("Firebase Initialized", admin.apps.length)
+console.log("Firebase Initialized", admin.apps.length);
+
+// Global Process-level Error Handlers to prevent silent process crashes
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ [Unhandled Rejection]:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("💥 [Uncaught Exception]:", error);
+});
 
 const app = express();
 app.set("trust proxy", 1);
@@ -38,15 +47,23 @@ app.use('/api/webhooks/xpress-wallet', express.raw({ type: 'application/json' })
 });
 
 // Middleware
-app.use(express.json( { strict: true }));
+app.use(express.json({ strict: true }));
 
+// Express JSON syntax error middleware
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ message: "Invalid JSON format in request body" });
+    return res.status(400).json({ status: "fail", message: "Invalid JSON format in request body" });
   }
-  next();
+  next(err);
 });
-app.use(cors());
+
+// Explicit CORS configuration for mobile clients
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  optionsSuccessStatus: 200
+}));
 
 // Apply rate limiting middleware
 app.use("/api", generalLimiter);
@@ -74,21 +91,36 @@ app.use('/images', express.static('public/images'));
 // 🗄️ Database Connection
 connectDB();
 
-// 🚀 MOUNTED FIX HERE: Execute the admin patch when server boots up
-// patchMerchantNameAdmin();
-
 // Basic Checks & Testing Endpoints
 app.get("/api", (req, res) => {
-    res.send("Zorah API is running");
+  res.json({ status: "success", message: "Zorah API is running" });
 });
   
 app.get('/api/v1/health', (req, res) => {
-    res.json({ status: 'Zorah backend is live 🚀' });
+  res.json({ status: "success", message: "Zorah backend is live 🚀" });
 });
 
 app.post("/api/test-route", (req, res) => {
-    res.json({ message: "Test route works!" });
+  res.json({ status: "success", message: "Test route works!" });
 });
-  
+
+// 404 Catch-All Handler (Guarantees JSON payload instead of default Express HTML)
+app.use((req, res, next) => {
+  res.status(404).json({
+    status: "fail",
+    message: `Route not found: ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Global Error Handler (Guarantees JSON fallback response for any unhandled exceptions)
+app.use((err, req, res, next) => {
+  console.error("🔥 [Unhandled Backend Error]:", err);
+  const statusCode = err.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+  res.status(statusCode).json({
+    status: "error",
+    message: err.message || "Internal Server Error"
+  });
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
