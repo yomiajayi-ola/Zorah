@@ -338,9 +338,32 @@ export const getFundingHistory = async (req, res) => {
   }
 };
 
+/**
+ * Helper to resolve authoritative KYC status for mobile API output.
+ * Authoritative field is KYC.status, with User.KycStatus as fallback.
+ * Maps DB statuses ("approved"/"verified", "pending", "rejected", "unverified")
+ * to the exact status strings supported by the mobile client contract.
+ */
+export const resolveKycStatus = (kycDoc, userDoc) => {
+  const rawStatus = kycDoc?.status || userDoc?.KycStatus || "unverified";
+  const normalized = String(rawStatus).trim().toLowerCase();
+
+  if (normalized === "approved" || normalized === "verified") {
+    return "verified";
+  }
+  if (normalized === "pending") {
+    return "pending";
+  }
+  if (normalized === "rejected") {
+    // Mobile UI KYC_STATUS_STYLES currently handles 'verified', 'pending', and falls back to 'unverified'
+    return "unverified";
+  }
+  return "unverified";
+};
+
 export const getOverview = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.id || req.user._id;
 
     // 1. Fetch all local data in parallel
     const [user, wallet, kyc, recentTransactions] = await Promise.all([
@@ -350,13 +373,34 @@ export const getOverview = async (req, res) => {
       Transaction.find({ user: userId }).sort({ createdAt: -1 }).limit(5)
     ]);
 
+    const resolvedStatus = resolveKycStatus(kyc, user);
+
     if (!wallet) {
       return res.status(200).json({ 
         success: true,
         hasWallet: false, 
-        message: "Complete KYC to activate your wallet." 
+        message: "Complete KYC to activate your wallet.",
+        account: {
+          balance: 0,
+          currency: "NGN",
+          accountNumber: "",
+          accountName: "",
+          tier: kyc?.tier || 0,
+          xpressCustomerId: "",
+          xpressWalletId: ""
+        },
+        kyc: {
+          status: resolvedStatus,
+          currentTier: kyc?.tier || 0
+        },
+        recentTransactions: [],
+        chartData: [],
+        userSettings: { 
+          biometricEnabled: user?.biometricEnabled || false
+        }
       });
     }
+
     const chartData = recentTransactions.reduce((acc, curr) => {
       const date = curr.createdAt.toISOString().split('T')[0];
       const existing = acc.find(item => item.date === date);
@@ -374,21 +418,22 @@ export const getOverview = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      hasWallet: true,
       account: {
         balance: wallet.balance,
         currency: wallet.currency || "NGN",
         accountNumber: wallet.accountNumber,
         accountName: wallet.accountName,
-        tier: kyc?.tier || 1,
+        tier: wallet.tier || kyc?.tier || 1,
         xpressCustomerId: wallet.xpressCustomerId,
         xpressWalletId: wallet.xpressWalletId
       },
       kyc: {
-        status: kyc?.walletStatus || "pending",
-        currentTier: kyc?.tier || 1
+        status: resolvedStatus,
+        currentTier: kyc?.tier || wallet.tier || 1
       },
       recentTransactions,
-      chartData, // Included safe computed data
+      chartData,
       userSettings: { 
         biometricEnabled: user?.biometricEnabled || false
       }
