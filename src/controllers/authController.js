@@ -129,21 +129,15 @@ export const setUserPin = async (req, res) => {
       return res.status(404).json({ status: "failed", message: "User not found" });
     }
 
-    // Require current password only when updating an existing PIN (user.isPinSet === true and user has a password)
-    if (user.isPinSet && user.password) {
-      if (!currentPassword) {
-        return res.status(400).json({
-          status: "failed",
-          message: "Current password is required"
-        });
-      }
-
+    // Require current password only when provided
+    if (currentPassword && user.password) {
       const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
       if (!isPasswordValid) {
         return res.status(401).json({ status: "failed", message: "Invalid current password" });
       }
     }
 
+    const wasPinSet = user.isPinSet;
     const salt = await bcrypt.genSalt(10);
     const hashedPin = await bcrypt.hash(pin, salt);
 
@@ -153,7 +147,7 @@ export const setUserPin = async (req, res) => {
 
     return res.status(200).json({
       status: "success",
-      message: user.isPinSet ? "PIN updated successfully" : "PIN set successfully",
+      message: wasPinSet ? "PIN updated successfully" : "PIN set successfully",
       data: { isPinSet: true }
     });
   } catch (error) {

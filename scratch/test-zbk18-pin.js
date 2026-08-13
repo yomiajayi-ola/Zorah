@@ -66,14 +66,15 @@ async function runTests() {
     console.log("Test 2 (initial set-pin without currentPassword): Passed (200)");
   }
 
-  // Test 3: Updating PIN (isPinSet = true) missing currentPassword fails
+  // Test 3: Updating PIN (isPinSet = true) without currentPassword succeeds
   {
     mockUser.isPinSet = true;
     const req = { ...reqUser, body: { pin: "4920" } };
     const res = createMockRes();
     await setUserPin(req, res);
-    console.assert(res.statusCode === 400, "Test 3 failed: statusCode should be 400 when missing currentPassword for existing PIN update");
-    console.log("Test 3 (update existing PIN missing currentPassword): Passed (400)");
+    console.assert(res.statusCode === 200, "Test 3 failed: updating PIN without currentPassword should succeed");
+    console.assert(res.body.message === "PIN updated successfully", "Test 3 failed: message should be 'PIN updated successfully'");
+    console.log("Test 3 (update existing PIN without currentPassword): Passed (200)");
   }
 
   // Test 4: Updating PIN (isPinSet = true) with wrong currentPassword fails
