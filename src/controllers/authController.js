@@ -122,13 +122,6 @@ export const setUserPin = async (req, res) => {
       });
     }
 
-    if (!currentPassword) {
-      return res.status(400).json({
-        status: "failed",
-        message: "Current password is required"
-      });
-    }
-
     const userId = req.user._id || req.user.id;
     const user = await User.findById(userId).select("+password");
 
@@ -136,9 +129,19 @@ export const setUserPin = async (req, res) => {
       return res.status(404).json({ status: "failed", message: "User not found" });
     }
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ status: "failed", message: "Invalid current password" });
+    // Require current password only when updating an existing PIN (user.isPinSet === true and user has a password)
+    if (user.isPinSet && user.password) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          status: "failed",
+          message: "Current password is required"
+        });
+      }
+
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ status: "failed", message: "Invalid current password" });
+      }
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -150,7 +153,7 @@ export const setUserPin = async (req, res) => {
 
     return res.status(200).json({
       status: "success",
-      message: "PIN updated successfully",
+      message: user.isPinSet ? "PIN updated successfully" : "PIN set successfully",
       data: { isPinSet: true }
     });
   } catch (error) {
