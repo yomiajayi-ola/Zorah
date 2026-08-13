@@ -29,6 +29,7 @@ import "./cron/billAlerts.js";
 console.log("Firebase Initialized", admin.apps.length)
 
 const app = express();
+app.set("trust proxy", 1);
 
 // Webhook raw body middleware
 app.use('/api/webhooks/xpress-wallet', express.raw({ type: 'application/json' }), (req, res, next) => {

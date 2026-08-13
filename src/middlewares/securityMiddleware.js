@@ -1,9 +1,11 @@
 import rateLimit from "express-rate-limit";
 
-// Auth rate limiter: Max 5 requests per 15-minute window for auth/sensitive routes
+// Auth rate limiter: Max 10 failed attempts per 15-minute window for auth/sensitive routes
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5,
+  max: 10,
+  skip: (req) => req.method === "OPTIONS", // Ignore CORS preflight requests from mobile
+  skipSuccessfulRequests: true, // Only count failed attempts (4xx/5xx), so successful logins/PIN updates don't lock user out
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -18,6 +20,7 @@ export const authLimiter = rateLimit({
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
+  skip: (req) => req.method === "OPTIONS", // Ignore CORS preflight requests from mobile
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
