@@ -1,9 +1,7 @@
-import https from 'https';
 import KYC from "../models/Kyc.js";
 import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
-import axios from "axios";
-const XPRESS_BASE_URL = process.env.XPRESS_WALLET_API_URL || "https://payment.xpress-wallet.com/api/v1";
+import { createCustomer } from "../services/xpressWalletService.js";
 
 // ✅ submit KYC with multer support
 export const submitKyc = async (req, res) => {
@@ -37,93 +35,34 @@ export const submitKyc = async (req, res) => {
       }
     }
 
-    // 4. Construct the Xpress Payload using DB values for Names and Email
-    const walletPayload = {
-      firstName: userRecord.firstName, // 👈 Picked from Signup data
-      lastName: userRecord.lastName,   // 👈 Picked from Signup data
-      email: userRecord.email,         // 👈 Picked from Signup data
-      phoneNumber: phoneNumber || userRecord.phoneNumber, 
-      bvn,
+    // 4. Provision Customer on Xpress Wallet via isolated service
+    const provisionResult = await createCustomer({
+      email: userRecord.email,
+      firstName: userRecord.firstName,
+      lastName: userRecord.lastName,
+      phoneNumber: phoneNumber || userRecord.phoneNumber,
       address,
       dateOfBirth,
-      accountPrefix: "11",
-      metadata: {
-        nin: nin,
-        userId: userId
+      bvn,
+      nin,
+      userId
+    });
+
+    const xpressCustomer = provisionResult.customer;
+    const xpressWallet = provisionResult.wallet;
+
+    // Prevent linking the same Xpress Customer Wallet to a different Zorah user if recovered
+    if (provisionResult.isRecovered && xpressCustomer?.id) {
+      const alreadyLinked = await Wallet.findOne({ xpressCustomerId: xpressCustomer.id });
+      if (alreadyLinked && alreadyLinked.user.toString() !== userId.toString()) {
+        console.error(`[KYC Recovery] Customer ${xpressCustomer.id} is already linked to Zorah user ${alreadyLinked.user}`);
+        return res.status(400).json({ 
+          message: "This identity/BVN is already registered with another Zorah account. Please log into your existing account or contact support." 
+        });
       }
-    };
+    }
 
-    // 5. Call Xpress API with Recovery Fallback
-    let xpressWallet;
-    let xpressCustomer;
-
-    try {
-      const walletResponse = await axios.post(
-        `${XPRESS_BASE_URL}/wallet`,
-        walletPayload,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      xpressWallet = walletResponse.data.wallet;
-      xpressCustomer = walletResponse.data.customer;
-    } catch (apiError) {
-      const errorMessage = apiError.response?.data?.message || apiError.message;
-      
-      if (errorMessage === "Customer already exist.") {
-        console.log(`[KYC Recovery] Customer already exists on Xpress Wallet. Attempting recovery for user email: ${userRecord.email}`);
-        
-        // Fetch all customers from Xpress Wallet to locate the existing one
-        const customersResponse = await axios.get(
-          `${XPRESS_BASE_URL}/customer?perPage=1000`,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
-            },
-          }
-        );
-        
-        const targetEmail = userRecord.email.toLowerCase();
-        const targetPhone = phoneNumber || userRecord.phoneNumber;
-        
-        const matchedCustomer = customersResponse.data.customers?.find(
-          (c) => c.email && c.email.toLowerCase() === targetEmail
-        );
-        
-        if (matchedCustomer) {
-          console.log(`[KYC Recovery] Match found on Xpress Wallet: ID=${matchedCustomer.id}, Acct=${matchedCustomer.accountNumber}`);
-          
-          // Prevent linking the same Xpress Customer Wallet to a different Zorah user
-          const alreadyLinked = await Wallet.findOne({ xpressCustomerId: matchedCustomer.id });
-          if (alreadyLinked && alreadyLinked.user.toString() !== userId.toString()) {
-            console.error(`[KYC Recovery] Customer ${matchedCustomer.id} is already linked to Zorah user ${alreadyLinked.user}`);
-            return res.status(400).json({ 
-              message: "This identity/BVN is already registered with another Zorah account. Please log into your existing account or contact support." 
-            });
-          }
-
-          xpressCustomer = {
-            id: matchedCustomer.id
-          };
-          xpressWallet = {
-            id: matchedCustomer.walletId,
-            accountNumber: matchedCustomer.accountNumber,
-            accountName: matchedCustomer.accountName || `${matchedCustomer.firstName} ${matchedCustomer.lastName}`,
-            customerId: matchedCustomer.id
-          };
-        } else {
-          console.error(`[KYC Recovery] Customer already exists error returned but could not find a matching record in Xpress Wallet list for email: ${userRecord.email}`);
-          throw apiError;
-        }
-      } else {
-        throw apiError;
-      }
-    } 
-
-    // 6. Save KYC record
+    // 5. Save KYC record
     const kyc = await KYC.create({
       user: userId,
       tier: Number(tier),
@@ -138,15 +77,15 @@ export const submitKyc = async (req, res) => {
     
     console.log("--- ATTEMPTING WALLET CREATION ---");
     console.log("User ID:", userId);
-    console.log("Customer ID:", xpressCustomer?.id);
+    console.log("Customer ID:", provisionResult.customerId);
     console.log("Account Number:", xpressWallet?.accountNumber);
 
-    // 2. Create Wallet record
+    // 6. Create Wallet record
     const wallet = await Wallet.create({
       user: userId,
       name: "Zorah Wallet",
       accountType: "bank",
-      xpressCustomerId: xpressCustomer?.id || xpressWallet?.customerId, 
+      xpressCustomerId: provisionResult.customerId, 
       xpressWalletId: xpressWallet?.id,
       accountNumber: xpressWallet?.accountNumber,
       accountName: xpressWallet?.accountName,
@@ -155,9 +94,10 @@ export const submitKyc = async (req, res) => {
       isDefault: true
     });
     
-    // 3. Update User for global reference
+    // 7. Update User for global reference
     await User.findByIdAndUpdate(userId, { 
-        walletId: xpressWallet.accountNumber,
+        walletId: xpressWallet?.accountNumber,
+        xpressCustomerId: provisionResult.customerId,
         KycStatus: "verified" 
     });
 

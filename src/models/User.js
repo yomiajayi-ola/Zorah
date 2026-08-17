@@ -31,6 +31,7 @@ const userSchema = new mongoose.Schema({
     default: "unverified",
   },
   walletId: { type: String }, // Providus Bank Account Number linked from Xpress Wallet
+  xpressCustomerId: { type: String, sparse: true }, // Linked Xpress Wallet Customer ID
 
   onboarding: {
     // Existing fields...
