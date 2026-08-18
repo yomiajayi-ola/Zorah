@@ -108,7 +108,9 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 };
 
 userSchema.methods.matchPin = async function (enteredPin) {
-  return await bcrypt.compare(enteredPin, this.pin);
+  const hash = this.pinHash || this.pin;
+  if (!hash || !enteredPin) return false;
+  return await bcrypt.compare(String(enteredPin), hash);
 };
 
 userSchema.methods.getSignedJwtToken = function() {

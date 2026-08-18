@@ -20,7 +20,7 @@ const getUserWallet = async (userId) => {
 export const depositFunds = async (req, res) => {
   try {
     const { amount, idempotencyKey, sessionId } = req.body;
-    const userId = req.user.id || req.user._id;
+    const userId = req.user._id || req.user.id;
     const numAmount = Number(amount);
 
     if (!numAmount || numAmount <= 0) {
@@ -28,7 +28,7 @@ export const depositFunds = async (req, res) => {
     }
 
     // 1. Idempotency Guard Check
-    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    const activeIdempotencyKey = idempotencyKey || req.headers?.["x-idempotency-key"];
     if (activeIdempotencyKey) {
       const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: userId });
       if (existingTx) {
@@ -82,7 +82,7 @@ export const depositFunds = async (req, res) => {
       }
     }
 
-    // 4. Update MongoDB Wallet balance & ledgerBalance
+    // 4. Update MongoDB Wallet balance & ledgerBalance (Authoritative Source of Truth)
     const balanceBefore = wallet.balance || 0;
     const balanceAfter = balanceBefore + numAmount;
 
@@ -127,31 +127,39 @@ export const depositFunds = async (req, res) => {
 // Withdraw funds to external bank
 export const withdrawFunds = async (req, res) => {
   try {
-    const { amount, bankCode, accountNumber, accountName, narration, pin, idempotencyKey, sessionId } = req.body;
-    const userId = req.user.id || req.user._id;
+    const { amount, bankCode, accountNumber, accountName, narration, pin, transactionPin, idempotencyKey, sessionId } = req.body;
+    const activePin = pin !== undefined ? pin : transactionPin;
+    const userId = req.user._id || req.user.id;
     const numAmount = Number(amount);
 
-    if (!numAmount || numAmount <= 0) {
-      return res.status(400).json({ status: "fail", message: "Invalid withdrawal amount specified." });
-    }
+    console.log(`[WITHDRAW CONTROLLER HIT] userId: ${userId}, hasPin: ${activePin !== undefined && activePin !== ""}`);
 
-    // 1. Mandatory PIN Validation
-    const user = await User.findById(userId);
+    // 1. Mandatory User Loading & PIN Validation (Enforced FIRST before financial operations)
+    const user = await User.findById(userId).select("+pinHash +pin");
     if (!user) {
-      return res.status(404).json({ status: "fail", message: "User not found." });
+      return res.status(404).json({ status: "fail", message: "User account not found." });
     }
 
-    if (!pin || !user.isPinSet) {
+    if (!user.isPinSet) {
       return res.status(400).json({ status: "fail", message: "Transaction PIN is required and must be set." });
     }
 
-    const isPinValid = await user.matchPin(pin);
+    if (activePin === undefined || activePin === null || String(activePin).trim() === "") {
+      return res.status(400).json({ status: "fail", message: "Transaction PIN is required." });
+    }
+
+    const isPinValid = await user.matchPin(String(activePin).trim());
     if (!isPinValid) {
       return res.status(400).json({ status: "fail", message: "Invalid transaction PIN." });
     }
 
-    // 2. Idempotency Guard Check
-    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    // 2. Validate Amount
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ status: "fail", message: "Invalid withdrawal amount specified." });
+    }
+
+    // 3. Idempotency Guard Check
+    const activeIdempotencyKey = idempotencyKey || req.headers?.["x-idempotency-key"];
     if (activeIdempotencyKey) {
       const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: userId });
       if (existingTx) {
@@ -167,7 +175,7 @@ export const withdrawFunds = async (req, res) => {
       }
     }
 
-    // 3. Wallet & Balance Check
+    // 4. Wallet & Balance Check
     const wallet = await Wallet.findOne({ user: userId });
     if (!wallet) {
       return res.status(404).json({ status: "fail", message: "Wallet not found for this user." });
@@ -177,14 +185,16 @@ export const withdrawFunds = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Insufficient funds in your Zorah wallet." });
     }
 
-    // 4. Beneficiary Verification & Transfer Execution
+    console.log(`[PIN VALIDATION PASSED — CALLING XPRESS WITHDRAWAL] userId: ${userId}, amount: ₦${numAmount}`);
+
+    // 5. Beneficiary Verification & Transfer Execution
     let resolvedAccountName = accountName || "Beneficiary";
     let xpressResponseData = null;
     let transferRef = `WDW-${Date.now()}-${uuidv4().substring(0, 8)}`;
 
     const hasSecretKey = !!process.env.XPRESS_WALLET_SECRET_KEY;
     if (hasSecretKey && process.env.NODE_ENV !== "test") {
-      // 4a. Verify beneficiary account details
+      // 5a. Verify beneficiary account details
       try {
         const verifyRes = await axios.get(
           `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
@@ -206,7 +216,7 @@ export const withdrawFunds = async (req, res) => {
         });
       }
 
-      // 4b. Perform Customer External Bank Transfer via Xpress
+      // 5b. Perform Customer External Bank Transfer via Xpress
       try {
         const response = await axios.post(
           `${XPRESS_BASE_URL}/transfer/bank/customer`,
@@ -237,7 +247,7 @@ export const withdrawFunds = async (req, res) => {
       }
     }
 
-    // 5. Double-Entry Ledger Updates & Snapshots
+    // 6. Double-Entry Ledger Updates & Snapshots
     const balanceBefore = wallet.balance;
     const balanceAfter = balanceBefore - numAmount;
 
@@ -245,7 +255,7 @@ export const withdrawFunds = async (req, res) => {
     wallet.ledgerBalance = (wallet.ledgerBalance || balanceBefore) - numAmount;
     await wallet.save();
 
-    // 6. Record Transaction Ledger Document
+    // 7. Record Transaction Ledger Document
     const trx = await Transaction.create({
       user: userId,
       wallet: wallet._id,
@@ -282,31 +292,20 @@ export const withdrawFunds = async (req, res) => {
   
 
 
-// Get wallet balance
-// /controllers/walletController.js
+// Get wallet balance (Authoritative read from MongoDB Wallet ledger)
 export const getWalletBalance = async (req, res) => {
   try {
-    const wallet = await Wallet.findOne({ user: req.user.id });
+    const userId = req.user._id || req.user.id;
+    const wallet = await Wallet.findOne({ user: userId });
     if (!wallet) {
-      return res.status(200).json({ success: true, balance: 0, hasWallet: false, message: "KYC not completed. No wallet exists yet." });
+      return res.status(200).json({ status: "success", balance: 0, hasWallet: false, message: "KYC not completed. No wallet exists yet." });
     }
     
-    // Fetch directly from Xpress using the customer endpoint
-    const response = await axios.get(
-      `${XPRESS_BASE_URL}/customer/${wallet.xpressCustomerId}`,
-      { headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` } }
-    );
-
-    const liveBalance = response.data.customer.availableBalance;
-    
-    // Update your local wallet balance field so it's not always 0
-    wallet.balance = liveBalance;
-    await wallet.save();
-
-    return res.json({ success: true, balance: liveBalance });
+    // Return authoritative balance from MongoDB ledger
+    return res.status(200).json({ status: "success", balance: wallet.balance, ledgerBalance: wallet.ledgerBalance || wallet.balance });
   } catch (error) {
-    console.error("Fetch Balance Error:", error.response?.data || error.message);
-    res.status(500).json({ message: "Could not fetch live balance", error: error.message });
+    console.error("Fetch Balance Error:", error.message);
+    return res.status(500).json({ status: "error", message: "Could not fetch balance", error: error.message });
   }
 };
 
@@ -325,7 +324,7 @@ export const transferToCustomer = async (req, res) => {
     }
 
     // 1. Mandatory PIN Validation
-    const user = await User.findById(fromUserId);
+    const user = await User.findById(fromUserId).select("+pinHash +pin");
     if (!user) {
       return res.status(404).json({ status: "fail", message: "User not found." });
     }
@@ -838,6 +837,7 @@ export const provisionVirtualAccount = async (req, res) => {
       firstName: user.firstName,
       lastName: user.lastName,
       phoneNumber: user.phoneNumber,
+      dateOfBirth: user.dateOfBirth || "1995-05-15",
       userId: user._id
     });
 

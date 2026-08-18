@@ -36,6 +36,7 @@ async function runZbk24Tests() {
     lastName: "User",
     email: "sender@zorah.app",
     isPinSet: true,
+    pin: "$2b$10$mockHashedPin1234",
     matchPin: async (enteredPin) => enteredPin === "1234"
   };
 
@@ -71,9 +72,11 @@ async function runZbk24Tests() {
 
   // Mock Mongoose Methods
   User.findById = (id) => {
-    if (id.toString() === senderId) return Promise.resolve(mockUserSender);
-    if (id.toString() === recipientId) return Promise.resolve(mockUserRecipient);
-    return Promise.resolve(null);
+    const userObj = (id && id.toString() === recipientId) ? mockUserRecipient : mockUserSender;
+    return {
+      select: () => Promise.resolve(userObj),
+      then: (resolve) => resolve(userObj)
+    };
   };
 
   Wallet.findOne = (query) => {
