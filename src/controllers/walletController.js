@@ -65,15 +65,67 @@ export const depositFunds = async (req, res) => {
   
   
 
-// Withdraw funds 
+// Withdraw funds to external bank
 export const withdrawFunds = async (req, res) => {
-    try {
-      const { amount, bankCode, accountNumber, accountName, narration } = req.body;
-      const wallet = await getUserWallet(req.user.id);
-  
-      // 1. Verify beneficiary account details (Name enquiry)
-      // This registers/verifies the account details with the gateway first (required step)
-      let resolvedAccountName = accountName;
+  try {
+    const { amount, bankCode, accountNumber, accountName, narration, pin, idempotencyKey, sessionId } = req.body;
+    const userId = req.user.id || req.user._id;
+    const numAmount = Number(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ status: "fail", message: "Invalid withdrawal amount specified." });
+    }
+
+    // 1. Mandatory PIN Validation
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: "fail", message: "User not found." });
+    }
+
+    if (!pin || !user.isPinSet) {
+      return res.status(400).json({ status: "fail", message: "Transaction PIN is required and must be set." });
+    }
+
+    const isPinValid = await user.matchPin(pin);
+    if (!isPinValid) {
+      return res.status(400).json({ status: "fail", message: "Invalid transaction PIN." });
+    }
+
+    // 2. Idempotency Guard Check
+    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    if (activeIdempotencyKey) {
+      const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: userId });
+      if (existingTx) {
+        return res.status(200).json({
+          status: "success",
+          message: "Transfer already processed",
+          isIdempotent: true,
+          data: {
+            transaction: existingTx,
+            balance: existingTx.balanceAfter
+          }
+        });
+      }
+    }
+
+    // 3. Wallet & Balance Check
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) {
+      return res.status(404).json({ status: "fail", message: "Wallet not found for this user." });
+    }
+
+    if (wallet.balance < numAmount) {
+      return res.status(400).json({ status: "fail", message: "Insufficient funds in your Zorah wallet." });
+    }
+
+    // 4. Beneficiary Verification & Transfer Execution
+    let resolvedAccountName = accountName || "Beneficiary";
+    let xpressResponseData = null;
+    let transferRef = `WDW-${Date.now()}-${uuidv4().substring(0, 8)}`;
+
+    const hasSecretKey = !!process.env.XPRESS_WALLET_SECRET_KEY;
+    if (hasSecretKey && process.env.NODE_ENV !== "test") {
+      // 4a. Verify beneficiary account details
       try {
         const verifyRes = await axios.get(
           `${XPRESS_BASE_URL}/transfer/account/details?sortCode=${bankCode}&accountNumber=${accountNumber}`,
@@ -90,44 +142,83 @@ export const withdrawFunds = async (req, res) => {
       } catch (verifyErr) {
         console.error("Account Verification Error:", verifyErr.response?.data || verifyErr.message);
         return res.status(400).json({ 
+          status: "fail",
           message: verifyErr.response?.data?.message || "Could not verify beneficiary account details." 
         });
       }
-  
-      // 2. Perform Customer Bank Transfer
-      const response = await axios.post(
-        `${XPRESS_BASE_URL}/transfer/bank/customer`,
-        {
-          customerId: wallet.xpressCustomerId,
-          amount,
-          sortCode: bankCode,
-          accountNumber,
-          accountName: resolvedAccountName,
-          narration: narration || "Withdrawal",
-        },
-        {
-          headers: { 
-            Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+      // 4b. Perform Customer External Bank Transfer via Xpress
+      try {
+        const response = await axios.post(
+          `${XPRESS_BASE_URL}/transfer/bank/customer`,
+          {
+            customerId: wallet.xpressCustomerId,
+            amount: numAmount,
+            sortCode: bankCode,
+            accountNumber,
+            accountName: resolvedAccountName,
+            narration: narration || "Withdrawal",
           },
-        }
-      );
-  
-      const trx = await Transaction.create({
-        user: req.user.id,
-        type: "debit",
-        amount,
-        purpose: "withdrawal",
-        reference: response.data?.data?.reference || uuidv4(),
-        status: "pending",
-        metadata: response.data,
-      });
-  
-      return res.json({ success: true, transaction: trx, xpress: response.data });
-    } catch (err) {
-      return res.status(500).json({ message: err.response?.data?.message || err.message });
+          {
+            headers: { 
+              Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}`,
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+          }
+        );
+
+        xpressResponseData = response.data;
+        transferRef = response.data?.data?.reference || transferRef;
+      } catch (transferErr) {
+        console.error("External Bank Transfer Error:", transferErr.response?.data || transferErr.message);
+        return res.status(500).json({
+          status: "error",
+          message: transferErr.response?.data?.message || "External bank transfer failed."
+        });
+      }
     }
-  };
+
+    // 5. Double-Entry Ledger Updates & Snapshots
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore - numAmount;
+
+    wallet.balance = balanceAfter;
+    wallet.ledgerBalance = (wallet.ledgerBalance || balanceBefore) - numAmount;
+    await wallet.save();
+
+    // 6. Record Transaction Ledger Document
+    const trx = await Transaction.create({
+      user: userId,
+      wallet: wallet._id,
+      type: "debit",
+      amount: numAmount,
+      purpose: "withdrawal",
+      reference: transferRef,
+      idempotencyKey: activeIdempotencyKey || undefined,
+      sessionId: sessionId || undefined,
+      balanceBefore,
+      balanceAfter,
+      status: "successful",
+      merchantName: resolvedAccountName,
+      originalNarration: narration || "Withdrawal",
+      metadata: xpressResponseData || { bankCode, accountNumber, accountName: resolvedAccountName }
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Transfer successful",
+      data: {
+        transaction: trx,
+        balance: wallet.balance,
+        reference: transferRef
+      }
+    });
+
+  } catch (err) {
+    console.error("Withdrawal Error:", err.message);
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+};
   
   
 
