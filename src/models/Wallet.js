@@ -15,6 +15,7 @@ const walletSchema = new mongoose.Schema({
   xpressWalletId: { type: String },    
   accountNumber: { type: String }, // This is the NUBAN used for funding
   accountName: { type: String },
+  bankName: { type: String, default: "Providus Bank" },
 
   balance: { type: Number, default: 0, required: true },
   currency: { type: String, default: "NGN" },

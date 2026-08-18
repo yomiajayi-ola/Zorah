@@ -127,6 +127,66 @@ export const createCustomer = async ({
   }
 };
 
+export const createVirtualAccount = async ({
+  customerId,
+  email,
+  firstName,
+  lastName,
+  phoneNumber,
+  address,
+  dateOfBirth,
+  bvn,
+  nin,
+  userId
+}) => {
+  // Fallback for test / offline environments when XPRESS_WALLET_SECRET_KEY is not configured
+  if (!process.env.XPRESS_WALLET_SECRET_KEY && process.env.NODE_ENV !== "production") {
+    console.warn("⚠️ [xpressWalletService] XPRESS_WALLET_SECRET_KEY missing. Using offline mock virtual account.");
+    return {
+      success: true,
+      accountNumber: "1177214654",
+      accountName: `${firstName} ${lastName}`.trim(),
+      bankName: "Providus Bank",
+      xpressWalletId: "wall_mock_999",
+      xpressCustomerId: customerId || "cust_mock_123",
+      isRecovered: false
+    };
+  }
+
+  // 1. If customerId is provided or needs provisioning, invoke createCustomer
+  const provisionResult = await createCustomer({
+    email,
+    firstName,
+    lastName,
+    phoneNumber,
+    address,
+    dateOfBirth,
+    bvn,
+    nin,
+    userId
+  });
+
+  const walletData = provisionResult.wallet || {};
+  const customerData = provisionResult.customer || {};
+
+  const activeCustomerId = customerId || provisionResult.customerId || customerData.id;
+  const accountNumber = walletData.accountNumber || "";
+  const accountName = walletData.accountName || `${firstName} ${lastName}`.trim();
+  const xpressWalletId = walletData.id || walletData.walletId || "";
+  const bankName = walletData.bankName || "Providus Bank";
+
+  return {
+    success: true,
+    accountNumber,
+    accountName,
+    bankName,
+    xpressWalletId,
+    xpressCustomerId: activeCustomerId,
+    isRecovered: provisionResult.isRecovered || false
+  };
+};
+
 export default {
-  createCustomer
+  createCustomer,
+  createVirtualAccount
 };

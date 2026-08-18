@@ -9,7 +9,8 @@ import {
   transferToCustomer,
   getBanksList,
   verifyBankAccount,
-  lookupRecipient 
+  lookupRecipient,
+  provisionVirtualAccount
 } from "../controllers/walletController.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -17,6 +18,7 @@ const router = express.Router();
 
 // router.use(protect);
 
+router.post("/virtual-account", protect, provisionVirtualAccount);
 router.post("/deposit", protect, depositFunds);
 router.post("/withdraw", protect, withdrawFunds);
 router.get("/balance", protect, getWalletBalance);

@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Wallet from "../models/Wallet.js";
 import KYC from "../models/Kyc.js";
 import Transaction from "../models/Transaction.js";
+import { createVirtualAccount } from "../services/xpressWalletService.js";
 import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
 import axios from "axios";
@@ -533,5 +534,102 @@ export const lookupRecipient = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * Provisions a virtual bank account (NUBAN) via Xpress Wallet for the authenticated user.
+ * Idempotent: returns existing account details with HTTP 200 if already provisioned.
+ */
+export const provisionVirtualAccount = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    // 1. Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ status: "fail", message: "User not found." });
+    }
+
+    // 2. Check if user already has an active wallet with account details
+    const existingWallet = await Wallet.findOne({ user: userId });
+    if (existingWallet && existingWallet.accountNumber) {
+      return res.status(200).json({
+        status: "success",
+        message: "Virtual account already provisioned",
+        data: {
+          accountNumber: existingWallet.accountNumber,
+          accountName: existingWallet.accountName,
+          bankName: existingWallet.bankName || "Providus Bank",
+          xpressCustomerId: existingWallet.xpressCustomerId,
+          xpressWalletId: existingWallet.xpressWalletId,
+          tier: existingWallet.tier,
+          balance: existingWallet.balance,
+          currency: existingWallet.currency
+        }
+      });
+    }
+
+    // 3. Call xpressWalletService to provision / recover virtual account
+    const accountResult = await createVirtualAccount({
+      customerId: user.xpressCustomerId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phoneNumber: user.phoneNumber,
+      userId: user._id
+    });
+
+    if (!accountResult.success || !accountResult.accountNumber) {
+      return res.status(500).json({
+        status: "error",
+        message: "Failed to provision virtual bank account details from Xpress Wallet."
+      });
+    }
+
+    // 4. Update or create Wallet document
+    const wallet = await Wallet.findOneAndUpdate(
+      { user: userId },
+      {
+        user: userId,
+        name: "Zorah Wallet",
+        accountType: "bank",
+        accountNumber: accountResult.accountNumber,
+        accountName: accountResult.accountName,
+        bankName: accountResult.bankName || "Providus Bank",
+        xpressCustomerId: accountResult.xpressCustomerId,
+        xpressWalletId: accountResult.xpressWalletId,
+        tier: 1,
+        status: "active"
+      },
+      { new: true, upsert: true }
+    );
+
+    // 5. Update User document with walletId and xpressCustomerId
+    await User.findByIdAndUpdate(userId, {
+      walletId: accountResult.accountNumber,
+      xpressCustomerId: accountResult.xpressCustomerId
+    });
+
+    return res.status(201).json({
+      status: "success",
+      message: "Virtual account created successfully",
+      data: {
+        accountNumber: wallet.accountNumber,
+        accountName: wallet.accountName,
+        bankName: wallet.bankName,
+        xpressCustomerId: wallet.xpressCustomerId,
+        xpressWalletId: wallet.xpressWalletId,
+        tier: wallet.tier,
+        balance: wallet.balance,
+        currency: wallet.currency
+      }
+    });
+  } catch (error) {
+    console.error("❌ [provisionVirtualAccount Error]:", error.message);
+    return res.status(500).json({
+      status: "error",
+      message: error.message || "Error provisioning virtual bank account"
+    });
   }
 };
