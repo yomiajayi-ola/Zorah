@@ -30,6 +30,24 @@ const transactionSchema = new mongoose.Schema({
     enum: ["pending", "successful", "failed"],
     default: "pending"
   },
+  wallet: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Wallet"
+  },
+  idempotencyKey: {
+    type: String,
+    sparse: true
+  },
+  sessionId: {
+    type: String,
+    sparse: true
+  },
+  balanceBefore: {
+    type: Number
+  },
+  balanceAfter: {
+    type: Number
+  },
   category: { 
     type: String, 
     default: "uncategorized" 

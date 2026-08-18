@@ -18,6 +18,8 @@ const walletSchema = new mongoose.Schema({
   bankName: { type: String, default: "Providus Bank" },
 
   balance: { type: Number, default: 0, required: true },
+  ledgerBalance: { type: Number, default: 0 },
+  lockedBalance: { type: Number, default: 0 },
   currency: { type: String, default: "NGN" },
   isDefault: { type: Boolean, default: true },
 

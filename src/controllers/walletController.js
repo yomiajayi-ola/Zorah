@@ -166,107 +166,159 @@ export const transferToCustomer = async (req, res) => {
   let apiResponseData = null;
 
   try {
-    session.startTransaction();
-
-    const { amount, toCustomerId, purpose } = req.body;
-    const fromUserId = req.user.id; // Use id from auth middleware
+    const { amount, toCustomerId, purpose, pin, idempotencyKey, sessionId, reference } = req.body;
+    const fromUserId = req.user.id || req.user._id;
     const transferAmount = Number(amount);
 
     if (!transferAmount || transferAmount <= 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "Invalid amount specified." });
+      return res.status(400).json({ status: "fail", message: "Invalid amount specified." });
     }
 
-    // 1. Fetch Sender's Wallet Details (within transaction session)
+    // 1. Mandatory PIN Validation
+    const user = await User.findById(fromUserId);
+    if (!user) {
+      return res.status(404).json({ status: "fail", message: "User not found." });
+    }
+
+    if (!pin || !user.isPinSet) {
+      return res.status(400).json({ status: "fail", message: "Transaction PIN is required and must be set." });
+    }
+
+    const isPinValid = await user.matchPin(pin);
+    if (!isPinValid) {
+      return res.status(400).json({ status: "fail", message: "Invalid transaction PIN." });
+    }
+
+    // 2. Idempotency Guard Check
+    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    if (activeIdempotencyKey) {
+      const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: fromUserId });
+      if (existingTx) {
+        return res.status(200).json({
+          status: "success",
+          message: "Transaction already processed",
+          isIdempotent: true,
+          data: {
+            transaction: existingTx,
+            reference: existingTx.reference
+          }
+        });
+      }
+    }
+
+    session.startTransaction();
+
+    // 3. Fetch Sender's Wallet Details (within transaction session)
     const fromWallet = await Wallet.findOne({ user: fromUserId }).session(session);
     if (!fromWallet) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({ message: "Sender wallet not found." });
+      return res.status(404).json({ status: "fail", message: "Sender wallet not found." });
     }
 
-    // 2. Fetch Recipient's Wallet Details (within transaction session)
+    // 4. Fetch Recipient's Wallet Details (within transaction session)
     const toWallet = await Wallet.findOne({ xpressCustomerId: toCustomerId }).session(session);
     if (!toWallet) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(404).json({ message: "Recipient wallet not found in Zorah records." });
+      return res.status(404).json({ status: "fail", message: "Recipient wallet not found in Zorah records." });
     }
 
-    // 3. Local Balance Check
+    // 5. Local Balance Check
     if (fromWallet.balance < transferAmount) {
       await session.abortTransaction();
       session.endSession();
-      return res.status(400).json({ message: "Insufficient funds in your Zorah wallet." });
+      return res.status(400).json({ status: "fail", message: "Insufficient funds in your Zorah wallet." });
     }
 
-    // 4. Xpress Wallet API Call
-    // NOTE: External API call cannot be rolled back, so if it fails, we safely abort the MongoDB transaction.
-    const agent = new https.Agent({ rejectUnauthorized: false });
-    let xpressResponse;
-    try {
-      xpressResponse = await axios.post(
-        `${XPRESS_BASE_URL}/transfer/wallet`,
-        {
-          amount: transferAmount,
-          fromCustomerId: fromWallet.xpressCustomerId,
-          toCustomerId: toCustomerId 
-        },
-        {
-          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
-          httpsAgent: agent
-        }
-      );
-    } catch (apiError) {
-      console.error("Xpress Transfer API Network Error:", apiError.response?.data || apiError.message);
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(502).json({
-        message: "External transfer service unavailable.",
-        error: apiError.response?.data?.message || apiError.message
-      });
+    // 6. Xpress Wallet API Call (if configured and live)
+    const hasSecretKey = !!process.env.XPRESS_WALLET_SECRET_KEY;
+    let transferRef = reference || `TRF-${Date.now()}-${uuidv4().substring(0, 8)}`;
+
+    if (hasSecretKey && process.env.NODE_ENV !== "test") {
+      const agent = new https.Agent({ rejectUnauthorized: false });
+      let xpressResponse;
+      try {
+        xpressResponse = await axios.post(
+          `${XPRESS_BASE_URL}/transfer/wallet`,
+          {
+            amount: transferAmount,
+            fromCustomerId: fromWallet.xpressCustomerId,
+            toCustomerId: toCustomerId
+          },
+          {
+            headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },
+            httpsAgent: agent
+          }
+        );
+      } catch (apiError) {
+        console.error("Xpress Transfer API Network Error:", apiError.response?.data || apiError.message);
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(502).json({
+          status: "fail",
+          message: "External transfer service unavailable.",
+          error: apiError.response?.data?.message || apiError.message
+        });
+      }
+
+      if (!xpressResponse.data.status) {
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(400).json({
+          status: "fail",
+          message: "Transfer declined by payment gateway.",
+          error: xpressResponse.data.message
+        });
+      }
+
+      isApiSuccessful = true;
+      apiResponseData = xpressResponse.data;
+      transferRef = apiResponseData.data?.reference || transferRef;
     }
 
-    if (!xpressResponse.data.status) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
-        message: "Transfer declined by payment gateway.",
-        error: xpressResponse.data.message
-      });
-    }
+    // 7. UPDATE SENDER: Record snapshots, update balance & ledgerBalance
+    const senderBalanceBefore = fromWallet.balance;
+    const senderBalanceAfter = senderBalanceBefore - transferAmount;
 
-    // Mark that API succeeded, so if DB writes fail afterwards we know we have a desync.
-    isApiSuccessful = true;
-    apiResponseData = xpressResponse.data;
-    const transferData = apiResponseData.data;
-
-    // 5. UPDATE SENDER: Debit balance and record transaction (within transaction session)
-    fromWallet.balance -= transferAmount;
+    fromWallet.balance = senderBalanceAfter;
+    fromWallet.ledgerBalance = (fromWallet.ledgerBalance || senderBalanceBefore) - transferAmount;
     await fromWallet.save({ session });
 
-    await Transaction.create([{
+    const [senderTx] = await Transaction.create([{
       user: fromUserId,
-      type: 'debit',
+      wallet: fromWallet._id,
+      type: "debit",
       amount: transferAmount,
-      purpose: purpose || 'transfer',
-      reference: transferData.reference,
-      status: 'successful',
-      metadata: apiResponseData
+      purpose: purpose || "transfer",
+      reference: transferRef,
+      idempotencyKey: activeIdempotencyKey || undefined,
+      sessionId: sessionId || undefined,
+      balanceBefore: senderBalanceBefore,
+      balanceAfter: senderBalanceAfter,
+      status: "successful",
+      metadata: apiResponseData || { recipientName: toWallet.accountName }
     }], { session });
 
-    // 6. UPDATE RECIPIENT: Credit balance and record transaction (within transaction session)
-    toWallet.balance += transferAmount;
+    // 8. UPDATE RECIPIENT: Credit balance & ledgerBalance, record transaction
+    const recipientBalanceBefore = toWallet.balance;
+    const recipientBalanceAfter = recipientBalanceBefore + transferAmount;
+
+    toWallet.balance = recipientBalanceAfter;
+    toWallet.ledgerBalance = (toWallet.ledgerBalance || recipientBalanceBefore) + transferAmount;
     await toWallet.save({ session });
 
     await Transaction.create([{
       user: toWallet.user,
-      type: 'credit',
+      wallet: toWallet._id,
+      type: "credit",
       amount: transferAmount,
-      purpose: 'transfer',
-      reference: `${transferData.reference}-REC`,
-      status: 'successful',
+      purpose: "transfer",
+      reference: `${transferRef}-REC`,
+      sessionId: sessionId || undefined,
+      balanceBefore: recipientBalanceBefore,
+      balanceAfter: recipientBalanceAfter,
+      status: "successful",
       metadata: { senderName: fromWallet.accountName }
     }], { session });
 
@@ -277,35 +329,40 @@ export const transferToCustomer = async (req, res) => {
     console.log(`✅ Transactional Transfer Successful: ${fromWallet.accountName} -> ${toWallet.accountName}`);
 
     return res.status(200).json({
-      success: true,
+      status: "success",
       message: `Successfully transferred ₦${transferAmount} to ${toWallet.accountName}`,
-      reference: transferData.reference
+      data: {
+        reference: transferRef,
+        amount: transferAmount,
+        balanceBefore: senderBalanceBefore,
+        balanceAfter: senderBalanceAfter,
+        transaction: senderTx
+      }
     });
 
   } catch (error) {
     console.error("Transfer Controller DB/Commit Error:", error.message);
     
-    // Rollback DB changes if session is still active
     if (session.inTransaction()) {
       await session.abortTransaction();
     }
     session.endSession();
 
     if (isApiSuccessful) {
-      // CRITICAL WARNING: External payment provider transferred the money, but our database failed to log/commit.
-      // This is a ledger inconsistency that requires manual reconciliation or a secondary queue job.
       console.error(
         `🚨 CRITICAL LEDGER DESYNC: Xpress Wallet transfer succeeded but local MongoDB transaction failed to commit. ` +
         `API Response Reference: ${apiResponseData?.data?.reference}. Error: ${error.message}`
       );
       
       return res.status(500).json({
+        status: "error",
         message: "Transfer succeeded at gateway but failed to record locally. Support has been notified.",
         reference: apiResponseData?.data?.reference
       });
     }
 
     return res.status(500).json({ 
+      status: "error",
       message: "Internal transfer processing error", 
       error: error.message 
     });
@@ -313,16 +370,70 @@ export const transferToCustomer = async (req, res) => {
 };
 
 
-// Get transaction history
+// Get paginated transaction history with filters
 export const getTransactions = async (req, res) => {
-    try {
-        const transactions = await Transaction.find({ user: req.user.id }).sort({ createdAt: -1 });
+  try {
+    const userId = req.user.id || req.user._id;
 
-        return res.status(200).json({ success: true, transactions });
-    } catch (error) {
-        return res.status(500).json({ success: false, message: error.message });
+    // 1. Extract query parameters & pagination limits
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const { type, status, purpose, startDate, endDate } = req.query;
+
+    // 2. Build dynamic query filters
+    const filter = { user: userId };
+
+    if (type) {
+      filter.type = type;
     }
-}
+    if (status) {
+      filter.status = status;
+    }
+    if (purpose) {
+      filter.purpose = purpose;
+    }
+
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // 3. Fetch count & paginated documents
+    const [total, transactions] = await Promise.all([
+      Transaction.countDocuments(filter),
+      Transaction.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("wallet", "accountNumber accountName bankName")
+    ]);
+
+    const pages = Math.ceil(total / limit) || 1;
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        transactions,
+        pagination: {
+          total,
+          page,
+          pages,
+          limit
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Get Transactions Error:", error.message);
+    return res.status(500).json({ status: "error", message: error.message });
+  }
+};
 
 // Get funding history
 export const getFundingHistory = async (req, res) => {
