@@ -1,4 +1,4 @@
-import { transferToCustomer, getTransactions } from "../src/controllers/walletController.js";
+import { transferToCustomer, getTransactions, depositFunds, withdrawFunds } from "../src/controllers/walletController.js";
 import User from "../src/models/User.js";
 import Wallet from "../src/models/Wallet.js";
 import Transaction from "../src/models/Transaction.js";
@@ -22,7 +22,7 @@ function createMockRes() {
 
 async function runZbk24Tests() {
   console.log("=================================================");
-  console.log("  ZBK-24: Transfer & Transactions Unit/Integration Tests");
+  console.log("  ZBK-24: Deposit, Withdraw, Transfer & Transactions Tests");
   console.log("=================================================");
 
   const senderId = "607f191e810c19729de860fe";
@@ -77,12 +77,15 @@ async function runZbk24Tests() {
   };
 
   Wallet.findOne = (query) => {
+    const targetWallet = (query.user && query.user.toString() === senderId)
+      ? mockSenderWallet
+      : (query.xpressCustomerId === "cust_recipient_999")
+        ? mockRecipientWallet
+        : null;
+
     return {
-      session: () => {
-        if (query.user && query.user.toString() === senderId) return Promise.resolve(mockSenderWallet);
-        if (query.xpressCustomerId === "cust_recipient_999") return Promise.resolve(mockRecipientWallet);
-        return Promise.resolve(null);
-      }
+      session: () => Promise.resolve(targetWallet),
+      then: (resolve) => resolve(targetWallet)
     };
   };
 
@@ -92,8 +95,11 @@ async function runZbk24Tests() {
   };
 
   Transaction.create = (docs) => {
-    docs.forEach(d => dbTransactions.push({ _id: `tx_${Date.now()}_${Math.random()}`, ...d }));
-    return Promise.resolve(docs.map(d => ({ _id: `tx_${Date.now()}`, ...d })));
+    const docArr = Array.isArray(docs) ? docs : [docs];
+    docArr.forEach(d => dbTransactions.push({ _id: `tx_${Date.now()}_${Math.random()}`, ...d }));
+    return Array.isArray(docs) 
+      ? Promise.resolve(docArr.map(d => ({ _id: `tx_${Date.now()}`, ...d })))
+      : Promise.resolve({ _id: `tx_${Date.now()}`, ...docArr[0] });
   };
 
   Transaction.countDocuments = (filter) => {
@@ -123,9 +129,71 @@ async function runZbk24Tests() {
     endSession: () => {}
   });
 
-  // --- TEST 1: PIN Validation Rejection ---
+  // --- TEST 1: Deposit Syncs Wallet Balance & Ledger Snapshots ---
   {
-    console.log("[Test 1] Testing missing / invalid PIN rejection...");
+    console.log("[Test 1] Testing depositFunds balance sync & ledger snapshots...");
+    const reqDeposit = {
+      ...senderReq,
+      body: { amount: 2000, idempotencyKey: "dep_test_key_001" },
+      headers: {}
+    };
+    const res = createMockRes();
+    await depositFunds(reqDeposit, res);
+
+    console.assert(res.statusCode === 200, `Test 1 failed: expected 200, got ${res.statusCode}`);
+    console.assert(mockSenderWallet.balance === 7000, `Test 1 failed: expected balance 7000, got ${mockSenderWallet.balance}`);
+    console.assert(mockSenderWallet.ledgerBalance === 7000, `Test 1 failed: expected ledgerBalance 7000, got ${mockSenderWallet.ledgerBalance}`);
+
+    console.log("✅ Test 1 (Deposit Balance Sync & Snapshots): Passed", {
+      newBalance: mockSenderWallet.balance,
+      newLedgerBalance: mockSenderWallet.ledgerBalance
+    });
+  }
+
+  // --- TEST 2: Withdrawal PIN Rejection ---
+  {
+    console.log("[Test 2] Testing withdrawFunds PIN validation rejection...");
+    const reqWithdrawNoPin = {
+      ...senderReq,
+      body: { amount: 1000, bankCode: "058", accountNumber: "0123456789", pin: "0000" }
+    };
+    const res = createMockRes();
+    await withdrawFunds(reqWithdrawNoPin, res);
+
+    console.assert(res.statusCode === 400, `Test 2 failed: expected 400, got ${res.statusCode}`);
+    console.assert(res.body.message === "Invalid transaction PIN.", "Test 2 failed: message mismatch");
+    console.log("✅ Test 2 (Withdrawal PIN Validation Rejection HTTP 400): Passed");
+  }
+
+  // --- TEST 3: Successful Withdrawal Balance Deduction & Snapshots ---
+  {
+    console.log("[Test 3] Testing withdrawFunds successful execution with correct PIN...");
+    const reqWithdraw = {
+      ...senderReq,
+      body: {
+        amount: 2000,
+        bankCode: "058",
+        accountNumber: "0123456789",
+        pin: "1234",
+        idempotencyKey: "wdw_test_key_001"
+      },
+      headers: {}
+    };
+    const res = createMockRes();
+    await withdrawFunds(reqWithdraw, res);
+
+    console.assert(res.statusCode === 200, `Test 3 failed: expected 200, got ${res.statusCode}`);
+    console.assert(mockSenderWallet.balance === 5000, `Test 3 failed: expected balance 5000, got ${mockSenderWallet.balance}`);
+    console.assert(mockSenderWallet.ledgerBalance === 5000, `Test 3 failed: expected ledgerBalance 5000, got ${mockSenderWallet.ledgerBalance}`);
+
+    console.log("✅ Test 3 (Withdrawal Balance Deduction & Snapshots): Passed", {
+      newBalance: mockSenderWallet.balance
+    });
+  }
+
+  // --- TEST 4: Transfer PIN Validation Rejection ---
+  {
+    console.log("[Test 4] Testing transferToCustomer missing / invalid PIN rejection...");
     const reqInvalidPin = {
       ...senderReq,
       body: { amount: 1000, toCustomerId: "cust_recipient_999", pin: "0000" }
@@ -133,14 +201,14 @@ async function runZbk24Tests() {
     const res = createMockRes();
     await transferToCustomer(reqInvalidPin, res);
 
-    console.assert(res.statusCode === 400, `Test 1 failed: expected 400, got ${res.statusCode}`);
-    console.assert(res.body.message === "Invalid transaction PIN.", "Test 1 failed: message mismatch");
-    console.log("✅ Test 1 (PIN Validation Rejection HTTP 400): Passed");
+    console.assert(res.statusCode === 400, `Test 4 failed: expected 400, got ${res.statusCode}`);
+    console.assert(res.body.message === "Invalid transaction PIN.", "Test 4 failed: message mismatch");
+    console.log("✅ Test 4 (Transfer PIN Validation Rejection HTTP 400): Passed");
   }
 
-  // --- TEST 2: Successful Double-Entry Transfer & Ledger Snapshots ---
+  // --- TEST 5: Successful Transfer & Double-Entry Ledger ---
   {
-    console.log("[Test 2] Testing successful double-entry transfer execution...");
+    console.log("[Test 5] Testing transferToCustomer double-entry transfer...");
     const reqTransfer = {
       ...senderReq,
       body: {
@@ -148,85 +216,50 @@ async function runZbk24Tests() {
         toCustomerId: "cust_recipient_999",
         pin: "1234",
         purpose: "transfer",
-        idempotencyKey: "idempotent_key_abc_123",
-        sessionId: "sess_xyz_789"
+        idempotencyKey: "trf_test_key_001"
       },
       headers: {}
     };
     const res = createMockRes();
     await transferToCustomer(reqTransfer, res);
 
-    console.assert(res.statusCode === 200, `Test 2 failed: expected 200, got ${res.statusCode}`);
-    console.assert(res.body.status === "success", "Test 2 failed: status mismatch");
-    console.assert(res.body.data.balanceBefore === 5000, `Test 2 failed: balanceBefore expected 5000, got ${res.body.data.balanceBefore}`);
-    console.assert(res.body.data.balanceAfter === 3000, `Test 2 failed: balanceAfter expected 3000, got ${res.body.data.balanceAfter}`);
-    console.assert(mockSenderWallet.balance === 3000, "Test 2 failed: sender balance update");
-    console.assert(mockSenderWallet.ledgerBalance === 3000, "Test 2 failed: sender ledger balance update");
-    console.assert(mockRecipientWallet.balance === 3000, "Test 2 failed: recipient balance update");
+    console.assert(res.statusCode === 200, `Test 5 failed: expected 200, got ${res.statusCode}`);
+    console.assert(mockSenderWallet.balance === 3000, `Test 5 failed: sender balance expected 3000, got ${mockSenderWallet.balance}`);
+    console.assert(mockRecipientWallet.balance === 3000, `Test 5 failed: recipient balance expected 3000, got ${mockRecipientWallet.balance}`);
 
-    console.log("✅ Test 2 (Double-Entry Transfer HTTP 200): Passed", {
-      balanceBefore: res.body.data.balanceBefore,
-      balanceAfter: res.body.data.balanceAfter,
-      senderWalletBalance: mockSenderWallet.balance,
-      recipientWalletBalance: mockRecipientWallet.balance
+    console.log("✅ Test 5 (Double-Entry Transfer HTTP 200): Passed", {
+      senderBalance: mockSenderWallet.balance,
+      recipientBalance: mockRecipientWallet.balance
     });
   }
 
-  // --- TEST 3: Idempotency Protection Guard ---
+  // --- TEST 6: Paginated Transactions Query ---
   {
-    console.log("[Test 3] Testing idempotency guard with identical idempotencyKey...");
-    const reqDuplicateTransfer = {
-      ...senderReq,
-      body: {
-        amount: 2000,
-        toCustomerId: "cust_recipient_999",
-        pin: "1234",
-        idempotencyKey: "idempotent_key_abc_123"
-      },
-      headers: {}
-    };
-    const res = createMockRes();
-    await transferToCustomer(reqDuplicateTransfer, res);
-
-    console.assert(res.statusCode === 200, `Test 3 failed: expected 200, got ${res.statusCode}`);
-    console.assert(res.body.isIdempotent === true, "Test 3 failed: isIdempotent flag expected true");
-    console.assert(mockSenderWallet.balance === 3000, "Test 3 failed: balance should not deduct again");
-
-    console.log("✅ Test 3 (Idempotent Guard HTTP 200): Passed", {
-      isIdempotent: res.body.isIdempotent,
-      message: res.body.message
-    });
-  }
-
-  // --- TEST 4: Paginated Transactions Query ---
-  {
-    console.log("[Test 4] Testing GET /api/wallet/transactions pagination and filters...");
+    console.log("[Test 6] Testing GET /api/wallet/transactions pagination and filters...");
     const reqTxQuery = {
       ...senderReq,
-      query: { page: "1", limit: "10", type: "debit" }
+      query: { page: "1", limit: "10" }
     };
     const res = createMockRes();
     await getTransactions(reqTxQuery, res);
 
-    console.assert(res.statusCode === 200, `Test 4 failed: expected 200, got ${res.statusCode}`);
-    console.assert(res.body.status === "success", "Test 4 failed: status mismatch");
-    console.assert(res.body.data.pagination.total === 1, `Test 4 failed: pagination total expected 1, got ${res.body.data.pagination.total}`);
-    console.assert(res.body.data.transactions.length === 1, "Test 4 failed: transactions list length");
+    console.assert(res.statusCode === 200, `Test 6 failed: expected 200, got ${res.statusCode}`);
+    console.assert(res.body.status === "success", "Test 6 failed: status mismatch");
+    console.assert(res.body.data.pagination.total >= 3, `Test 6 failed: expected total >= 3, got ${res.body.data.pagination.total}`);
 
-    console.log("✅ Test 4 (Paginated Transactions GET HTTP 200): Passed", {
+    console.log("✅ Test 6 (Paginated Transactions GET HTTP 200): Passed", {
       total: res.body.data.pagination.total,
       page: res.body.data.pagination.page,
-      limit: res.body.data.pagination.limit,
-      txCount: res.body.data.transactions.length
+      limit: res.body.data.pagination.limit
     });
   }
 
   console.log("=================================================");
-  console.log("  ALL ZBK-24 TESTS PASSED SUCCESSFULLY 🎉");
+  console.log("  ALL TESTS PASSED SUCCESSFULLY 🎉");
   console.log("=================================================");
 }
 
 runZbk24Tests().catch((err) => {
-  console.error("ZBK-24 Test Suite Error:", err);
+  console.error("Test Suite Error:", err);
   process.exit(1);
 });

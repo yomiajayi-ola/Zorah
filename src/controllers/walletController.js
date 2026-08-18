@@ -18,50 +18,109 @@ const getUserWallet = async (userId) => {
   
 
 export const depositFunds = async (req, res) => {
-    try {
-      const { amount } = req.body;
-      if (!amount || amount <= 0)
-        return res.status(400).json({ message: "Invalid amount" });
-  
-      const wallet = await Wallet.findOne({ user: req.user.id });
-      if (!wallet)
-        return res.status(400).json({
-          status: false,
-          message: "No wallet exists for this user. Complete KYC to create wallet."
-        });
-  
-      const reference = uuidv4();
-  
-      const response = await axios.post(
-        `${XPRESS_BASE_URL}/wallet/credit`,
-        {
-          amount,
-          reference,
-          customerId: wallet.xpressCustomerId,
-          metadata: { purpose: "deposit" }
-        },
-        {
-          headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` }
-        }
-      );
-  
-      await Transaction.create({
-        user: req.user.id,
-        type: "credit",
-        amount,
-        purpose: "deposit",
-        reference,
-        status: "pending",
-        metadata: response.data
-      });
-  
-      return res.json({ success: true, reference, xpress: response.data });
-    } catch (err) {
-      return res
-        .status(500)
-        .json({ message: err.response?.data?.message || err.message });
+  try {
+    const { amount, idempotencyKey, sessionId } = req.body;
+    const userId = req.user.id || req.user._id;
+    const numAmount = Number(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      return res.status(400).json({ status: "fail", message: "Invalid deposit amount specified." });
     }
-  };
+
+    // 1. Idempotency Guard Check
+    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    if (activeIdempotencyKey) {
+      const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: userId });
+      if (existingTx) {
+        return res.status(200).json({
+          status: "success",
+          message: "Deposit already processed",
+          isIdempotent: true,
+          data: {
+            transaction: existingTx,
+            balance: existingTx.balanceAfter
+          }
+        });
+      }
+    }
+
+    // 2. Fetch User's Wallet
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet) {
+      return res.status(400).json({
+        status: "fail",
+        message: "No wallet exists for this user. Complete KYC to create wallet."
+      });
+    }
+
+    const reference = `DEP-${Date.now()}-${uuidv4().substring(0, 8)}`;
+    let responseData = null;
+
+    // 3. Xpress Wallet credit call if configured & live
+    const hasSecretKey = !!process.env.XPRESS_WALLET_SECRET_KEY;
+    if (hasSecretKey && process.env.NODE_ENV !== "test") {
+      try {
+        const response = await axios.post(
+          `${XPRESS_BASE_URL}/wallet/credit`,
+          {
+            amount: numAmount,
+            reference,
+            customerId: wallet.xpressCustomerId,
+            metadata: { purpose: "deposit" }
+          },
+          {
+            headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` }
+          }
+        );
+        responseData = response.data;
+      } catch (apiErr) {
+        console.error("Xpress Deposit API Error:", apiErr.response?.data || apiErr.message);
+        return res.status(500).json({
+          status: "error",
+          message: apiErr.response?.data?.message || "Xpress deposit gateway failed."
+        });
+      }
+    }
+
+    // 4. Update MongoDB Wallet balance & ledgerBalance
+    const balanceBefore = wallet.balance || 0;
+    const balanceAfter = balanceBefore + numAmount;
+
+    wallet.balance = balanceAfter;
+    wallet.ledgerBalance = (wallet.ledgerBalance || balanceBefore) + numAmount;
+    await wallet.save();
+
+    // 5. Create Transaction record with double-entry fields
+    const trx = await Transaction.create({
+      user: userId,
+      wallet: wallet._id,
+      type: "credit",
+      amount: numAmount,
+      purpose: "deposit",
+      reference,
+      idempotencyKey: activeIdempotencyKey || undefined,
+      sessionId: sessionId || undefined,
+      balanceBefore,
+      balanceAfter,
+      status: "successful",
+      metadata: responseData || { purpose: "deposit" }
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Deposit successful",
+      data: {
+        transaction: trx,
+        balance: wallet.balance,
+        reference
+      }
+    });
+
+  } catch (err) {
+    console.error("Deposit Error:", err.message);
+    return res.status(500).json({ status: "error", message: err.message });
+  }
+};
   
   
 
