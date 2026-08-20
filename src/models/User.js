@@ -109,8 +109,10 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
 
 userSchema.methods.matchPin = async function (enteredPin) {
   const hash = this.pinHash || this.pin;
-  if (!hash || !enteredPin) return false;
-  return await bcrypt.compare(String(enteredPin), hash);
+  if (!hash || enteredPin === undefined || enteredPin === null || String(enteredPin).trim() === "") {
+    return false;
+  }
+  return await bcrypt.compare(String(enteredPin).trim(), hash);
 };
 
 userSchema.methods.getSignedJwtToken = function() {

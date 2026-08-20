@@ -315,27 +315,33 @@ export const transferToCustomer = async (req, res) => {
   let apiResponseData = null;
 
   try {
-    const { amount, toCustomerId, purpose, pin, idempotencyKey, sessionId, reference } = req.body;
+    const { amount, toCustomerId, purpose, pin, transactionPin, idempotencyKey, sessionId, reference } = req.body;
+    const activePin = pin !== undefined ? pin : transactionPin;
     const fromUserId = req.user.id || req.user._id;
     const transferAmount = Number(amount);
 
-    if (!transferAmount || transferAmount <= 0) {
-      return res.status(400).json({ status: "fail", message: "Invalid amount specified." });
-    }
-
-    // 1. Mandatory PIN Validation
+    // 1. Mandatory User Loading & PIN Validation (Enforced FIRST before financial operations)
     const user = await User.findById(fromUserId).select("+pinHash +pin");
     if (!user) {
-      return res.status(404).json({ status: "fail", message: "User not found." });
+      return res.status(404).json({ status: "fail", message: "User account not found." });
     }
 
-    if (!pin || !user.isPinSet) {
+    if (!user.isPinSet) {
       return res.status(400).json({ status: "fail", message: "Transaction PIN is required and must be set." });
     }
 
-    const isPinValid = await user.matchPin(pin);
+    if (activePin === undefined || activePin === null || String(activePin).trim() === "") {
+      return res.status(400).json({ status: "fail", message: "Transaction PIN is required." });
+    }
+
+    const isPinValid = await user.matchPin(String(activePin).trim());
     if (!isPinValid) {
       return res.status(400).json({ status: "fail", message: "Invalid transaction PIN." });
+    }
+
+    // 2. Validate Amount
+    if (!transferAmount || transferAmount <= 0) {
+      return res.status(400).json({ status: "fail", message: "Invalid amount specified." });
     }
 
     // 2. Idempotency Guard Check
@@ -366,11 +372,44 @@ export const transferToCustomer = async (req, res) => {
     }
 
     // 4. Fetch Recipient's Wallet Details (within transaction session)
-    const toWallet = await Wallet.findOne({ xpressCustomerId: toCustomerId }).session(session);
+    const targetRecipientId = toCustomerId || req.body.recipientIdentifier || req.body.recipientEmail || req.body.accountNumber;
+    let toWallet = null;
+
+    if (targetRecipientId) {
+      toWallet = await Wallet.findOne({
+        $or: [
+          { xpressCustomerId: targetRecipientId },
+          { accountNumber: targetRecipientId }
+        ]
+      }).session(session);
+
+      if (!toWallet && mongoose.Types.ObjectId.isValid(targetRecipientId)) {
+        toWallet = await Wallet.findOne({ user: targetRecipientId }).session(session);
+      }
+
+      if (!toWallet && typeof targetRecipientId === "string" && (targetRecipientId.includes("@") || /^\d{10,11}$/.test(targetRecipientId))) {
+        const recipientUser = await User.findOne({
+          $or: [
+            { email: targetRecipientId.toLowerCase().trim() },
+            { phoneNumber: targetRecipientId.trim() }
+          ]
+        });
+        if (recipientUser) {
+          toWallet = await Wallet.findOne({ user: recipientUser._id }).session(session);
+        }
+      }
+    }
+
     if (!toWallet) {
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({ status: "fail", message: "Recipient wallet not found in Zorah records." });
+    }
+
+    if (!toWallet.xpressCustomerId) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ status: "fail", message: "Recipient does not have an active Xpress wallet customer ID." });
     }
 
     // 5. Local Balance Check
@@ -393,7 +432,7 @@ export const transferToCustomer = async (req, res) => {
           {
             amount: transferAmount,
             fromCustomerId: fromWallet.xpressCustomerId,
-            toCustomerId: toCustomerId
+            toCustomerId: toWallet.xpressCustomerId
           },
           {
             headers: { Authorization: `Bearer ${process.env.XPRESS_WALLET_SECRET_KEY}` },

@@ -165,17 +165,17 @@ export const verifyUserPin = async (req, res) => {
     }
 
     const userId = req.user._id || req.user.id;
-    const user = await User.findById(userId).select("+pinHash");
+    const user = await User.findById(userId).select("+pinHash +pin");
 
     if (!user) {
       return res.status(404).json({ status: "failed", message: "User not found" });
     }
 
-    if (!user.isPinSet || !user.pinHash) {
+    if (!user.isPinSet) {
       return res.status(400).json({ status: "failed", message: "PIN not set" });
     }
 
-    const isMatch = await bcrypt.compare(pin, user.pinHash);
+    const isMatch = await user.matchPin(pin);
     if (!isMatch) {
       return res.status(401).json({ status: "failed", message: "Invalid PIN" });
     }

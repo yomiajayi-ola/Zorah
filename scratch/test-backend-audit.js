@@ -8,11 +8,13 @@ async function runAuditTests() {
   console.log("--- START BACKEND AUDIT TEST SUITE ---");
 
   const app = express();
-  
+
   // JSON Syntax Error Middleware
   app.use(express.json({ strict: true }));
   app.use((err, req, res, next) => {
-    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    if (err instanceof SyntaxError && err.status === 400 && 'body'
+
+      in err) {
       return res.status(400).json({ status: "fail", message: "Invalid JSON format in request body" });
     }
     next(err);
