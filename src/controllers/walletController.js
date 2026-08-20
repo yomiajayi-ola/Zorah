@@ -345,7 +345,7 @@ export const transferToCustomer = async (req, res) => {
     }
 
     // 2. Idempotency Guard Check
-    const activeIdempotencyKey = idempotencyKey || req.headers["x-idempotency-key"];
+    const activeIdempotencyKey = idempotencyKey || req.headers?.["x-idempotency-key"];
     if (activeIdempotencyKey) {
       const existingTx = await Transaction.findOne({ idempotencyKey: activeIdempotencyKey, user: fromUserId });
       if (existingTx) {

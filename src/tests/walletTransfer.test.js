@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import axios from 'axios';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Wallet from '../models/Wallet.js';
 import Transaction from '../models/Transaction.js';
@@ -42,7 +43,9 @@ async function runTests() {
       email: senderEmail,
       password: 'password123',
       firstName: 'Suite',
-      lastName: 'Sender'
+      lastName: 'Sender',
+      isPinSet: true,
+      pinHash: await bcrypt.hash("1234", 10)
     });
 
     const receiver = await User.create({
@@ -100,7 +103,8 @@ async function runTests() {
       body: {
         amount: 1500,
         toCustomerId: 'cust_suite_receiver_456',
-        purpose: 'transfer'
+        purpose: 'transfer',
+        pin: '1234'
       }
     };
     const res1 = mockResponse();
@@ -137,7 +141,8 @@ async function runTests() {
       body: {
         amount: 1500,
         toCustomerId: 'cust_suite_receiver_456',
-        purpose: 'transfer'
+        purpose: 'transfer',
+        pin: '1234'
       }
     };
     const res2 = mockResponse();

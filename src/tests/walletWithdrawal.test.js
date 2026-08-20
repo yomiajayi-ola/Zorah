@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import axios from 'axios';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Wallet from '../models/Wallet.js';
 import Transaction from '../models/Transaction.js';
@@ -41,7 +42,9 @@ async function runTests() {
       email: testEmail,
       password: 'password123',
       firstName: 'Suite',
-      lastName: 'Withdraw'
+      lastName: 'Withdraw',
+      isPinSet: true,
+      pinHash: '$2a$10$vI8aWBmW3f4e3cW4/GzDdeT2R1vMh18W8x8K9z8X8K9z8X8K9z8X8' // pre-hashed placeholder
     });
 
     // 2. Create Test Wallet
@@ -98,6 +101,9 @@ async function runTests() {
 
     // --- TEST 1: SUCCESSFUL WITHDRAWAL ---
     console.log('\n--- Running Test 1: Successful Withdrawal ---');
+    user.pinHash = await bcrypt.hash("1234", 10);
+    await user.save();
+
     const req1 = {
       user: { id: user._id },
       body: {
@@ -105,7 +111,8 @@ async function runTests() {
         bankCode: '000013',
         accountNumber: '0167421242',
         accountName: 'Beneficiary Name',
-        narration: 'Test Payout Narration'
+        narration: 'Test Payout Narration',
+        pin: '1234'
       }
     };
     const res1 = mockResponse();
