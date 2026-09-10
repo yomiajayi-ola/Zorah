@@ -3,6 +3,7 @@ module.exports = {
     {
       name: "zorah-backend",
       script: "./src/app.js",
+      cwd: "/home/ec2-user/Zorah",
       env: {
         PORT: 4000,
         NODE_ENV: "production",
@@ -12,6 +13,7 @@ module.exports = {
     {
       name: "zorah-staging",
       script: "./src/app.js",
+      cwd: "/home/ec2-user/Zorah",
       env: {
         PORT: 4001,
         NODE_ENV: "staging",

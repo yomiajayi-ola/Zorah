@@ -1,9 +1,15 @@
 import admin from "firebase-admin";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const envPath = process.env.DOTENV_CONFIG_PATH || (process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : ".env");
-dotenv.config({ path: envPath });
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, "../../");
+
+const envFile = process.env.DOTENV_CONFIG_PATH || (process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : ".env");
+dotenv.config({ path: path.isAbsolute(envFile) ? envFile : path.resolve(rootDir, envFile) });
+dotenv.config({ path: path.resolve(rootDir, ".env") });
 
 // Ensure the private key handles newlines correctly
 const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
