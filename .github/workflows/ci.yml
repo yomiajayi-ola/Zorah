@@ -1,0 +1,52 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, staging ]
+  pull_request:
+    branches: [ main, staging ]
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Shell script verification
+        run: bash -n scripts/setup-ec2.sh
+
+      - name: Environment check
+        run: |
+          if [ ! -f .env.example ]; then
+            echo "Error: .env.example file does not exist!"
+            exit 1
+          fi
+          echo "Verifying .env.example contains no empty keys..."
+          EMPTY_KEYS=$(grep -v '^#' .env.example | grep -v '^\s*$' | grep -E '^[A-Za-z_][A-Za-z0-9_]*=\s*$' || true)
+          if [ -n "$EMPTY_KEYS" ]; then
+            echo "Error: Found empty keys in .env.example:"
+            echo "$EMPTY_KEYS"
+            exit 1
+          fi
+          echo ".env.example verification passed successfully."
+
+      - name: Run tests
+        run: |
+          if node -e 'const pkg = require("./package.json"); if (pkg.scripts && pkg.scripts.test && !pkg.scripts.test.includes("no test specified")) process.exit(0); else process.exit(1);'; then
+            echo "Test script found in package.json. Executing tests..."
+            npm test
+          else
+            echo "No custom test script configured in package.json. Skipping tests gracefully."
+          fi
