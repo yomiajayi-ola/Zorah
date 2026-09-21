@@ -23,6 +23,8 @@ import aiRoutes from "./routes/ai.routes.js";
 import voiceRoutes from "./routes/voice.routes.js"
 import webhookRoutes from "./routes/webhook.routes.js"
 import billRoutes from "./routes/bills.routes.js";
+import owambeRoutes from "./routes/owambe.routes.js";
+import debtRoutes from "./routes/debt.routes.js";
 import { generalLimiter, authLimiter } from "./middlewares/securityMiddleware.js";
 import "./cron/billAlerts.js";
 
@@ -84,6 +86,8 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/voice", voiceRoutes);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/bills", billRoutes);
+app.use("/api/owambe", owambeRoutes);
+app.use("/api/debts", debtRoutes);
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 app.use('/images', express.static('public/images'));
