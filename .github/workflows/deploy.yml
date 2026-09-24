@@ -37,8 +37,9 @@ jobs:
     needs: [test]
     runs-on: ubuntu-latest
     steps:
-      - name: Set Environment Variables
+      - name: Record Start Time & Set Environment Variables
         run: |
+          echo "START_TIME=$(date +%s)" >> $GITHUB_ENV
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "TARGET_ENV=production" >> $GITHUB_ENV
             echo "PM2_NAME=zorah-backend" >> $GITHUB_ENV
@@ -47,6 +48,10 @@ jobs:
             echo "TARGET_ENV=staging" >> $GITHUB_ENV
             echo "PM2_NAME=zorah-staging" >> $GITHUB_ENV
             echo "BRANCH=staging" >> $GITHUB_ENV
+          else
+            echo "TARGET_ENV=production" >> $GITHUB_ENV
+            echo "PM2_NAME=zorah-backend" >> $GITHUB_ENV
+            echo "BRANCH=main" >> $GITHUB_ENV
           fi
 
       - name: Execute Remote Deployment via SSH
@@ -62,3 +67,42 @@ jobs:
             cd /home/ec2-user/Zorah
             chmod +x scripts/deploy-reload.sh
             ./scripts/deploy-reload.sh $BRANCH $PM2_NAME
+
+      - name: Generate Deployment Summary & Metrics
+        if: always()
+        run: |
+          END_TIME=$(date +%s)
+          START_TIME=${START_TIME:-$END_TIME}
+          DURATION=$((END_TIME - START_TIME))
+          
+          if [ "${{ job.status }}" = "success" ]; then
+            STATUS_ICON="✅"
+            STATUS_TEXT="Success"
+          else
+            STATUS_ICON="❌"
+            STATUS_TEXT="Failure / Rolled Back"
+          fi
+          
+          PORT="4000"
+          if [ "$TARGET_ENV" = "staging" ]; then
+            PORT="4001"
+          fi
+          
+          UTC_NOW=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          echo "### $STATUS_ICON Deployment Summary - $TARGET_ENV" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric / Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployment Status** | $STATUS_ICON $STATUS_TEXT |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Environment** | \`$TARGET_ENV\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **PM2 Process Name** | \`$PM2_NAME\` (Port $PORT) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Branch** | \`$BRANCH\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git Commit SHA** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered By** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Execution Duration** | \`${DURATION}s\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Timestamp (UTC)** | \`$UTC_NOW\` |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "----------------------------------------------------------------------"
+          echo "📊 Deployment Execution Duration: ${DURATION}s"
+          echo "----------------------------------------------------------------------"
