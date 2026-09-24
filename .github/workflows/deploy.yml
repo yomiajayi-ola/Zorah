@@ -1,0 +1,64 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main, staging ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pre-Deployment Test Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify JavaScript syntax
+        run: node -c src/app.js src/models/*.js src/controllers/*.js src/routes/*.js
+
+      - name: Run automated test suite
+        run: node src/tests/owambeDebt.test.js
+
+  deploy:
+    name: Deploy to EC2
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Environment Variables
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "TARGET_ENV=production" >> $GITHUB_ENV
+            echo "PM2_NAME=zorah-backend" >> $GITHUB_ENV
+            echo "BRANCH=main" >> $GITHUB_ENV
+          elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
+            echo "TARGET_ENV=staging" >> $GITHUB_ENV
+            echo "PM2_NAME=zorah-staging" >> $GITHUB_ENV
+            echo "BRANCH=staging" >> $GITHUB_ENV
+          fi
+
+      - name: Execute Remote Deployment via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          envs: TARGET_ENV,PM2_NAME,BRANCH
+          script: |
+            set -e
+            cd /home/ec2-user/Zorah
+            chmod +x scripts/deploy-reload.sh
+            ./scripts/deploy-reload.sh $BRANCH $PM2_NAME

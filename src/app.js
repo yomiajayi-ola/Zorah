@@ -95,6 +95,19 @@ app.use('/images', express.static('public/images'));
 // 🗄️ Database Connection
 connectDB();
 
+// Health Check Endpoints
+const healthHandler = (req, res) => {
+  res.status(200).json({
+    status: "success",
+    message: "Zorah backend is healthy",
+    uptime: process.uptime(),
+    timestamp: new Date()
+  });
+};
+
+app.get("/health", healthHandler);
+app.get("/api/health", healthHandler);
+
 // Basic Checks & Testing Endpoints
 app.get("/api", (req, res) => {
   res.json({ status: "success", message: "Zorah API is running" });
