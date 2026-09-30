@@ -1,0 +1,532 @@
+{
+  "info": {
+    "_postman_id": "9b1d3a4c-8e2f-4a1b-9c7d-5e3f2a1b0c9d",
+    "name": "Owambe Mode & Debt Tracker API",
+    "description": "Postman Collection for testing PocketMonie Owambe Mode (Event Budgets) and Debt Tracker & WhatsApp Nudge Engine.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Owambe Mode",
+      "item": [
+        {
+          "name": "1. Create Event Budget",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Response structure is valid', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "    pm.expect(jsonData.data).to.have.property('_id');",
+                  "    pm.expect(jsonData.data.totalSpent).to.eql(0);",
+                  "    pm.environment.set('eventId', jsonData.data._id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Lagos Wedding Owambe 2026\",\n  \"targetBudget\": 500000,\n  \"categoryTags\": [\"aso ebi\", \"transport\", \"gift money\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/owambe/events",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events"]
+            }
+          }
+        },
+        {
+          "name": "2. Get All Event Budgets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Response contains array of budgets', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/owambe/events?status=active",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. Get Event Budget By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Event ID matches environment eventId', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data._id).to.eql(pm.environment.get('eventId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/owambe/events/{{eventId}}",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events", "{{eventId}}"]
+            }
+          }
+        },
+        {
+          "name": "4. Add Itemized Expense to Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('totalSpent recalculated correctly', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.totalSpent).to.eql(75000);",
+                  "    const items = jsonData.data.itemizedList;",
+                  "    pm.expect(items.length).to.be.at.least(1);",
+                  "    pm.environment.set('itemId', items[items.length - 1]._id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aso Ebi Lace Fabric\",\n  \"estimatedCost\": 80000,\n  \"actualCost\": 75000,\n  \"paid\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/owambe/events/{{eventId}}/expenses",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events", "{{eventId}}", "expenses"]
+            }
+          }
+        },
+        {
+          "name": "5. Update Event Budget Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Target budget updated', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.targetBudget).to.eql(600000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetBudget\": 600000,\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/owambe/events/{{eventId}}",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events", "{{eventId}}"]
+            }
+          }
+        },
+        {
+          "name": "6. Delete Itemized Expense Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Item removed and totalSpent updated to 0', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.totalSpent).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/owambe/events/{{eventId}}/items/{{itemId}}",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events", "{{eventId}}", "items", "{{itemId}}"]
+            }
+          }
+        },
+        {
+          "name": "7. Delete Event Budget",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Deletion confirmation message returned', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('deleted successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/owambe/events/{{eventId}}",
+              "host": ["{{base_url}}"],
+              "path": ["owambe", "events", "{{eventId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Debt Tracker",
+      "item": [
+        {
+          "name": "1. Create Debt (owe_me - Someone owes me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Debt record created with type owe_me', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "    pm.expect(jsonData.data.type).to.eql('owe_me');",
+                  "    pm.environment.set('debtId_owe_me', jsonData.data._id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"debtorName\": \"Tunde Afolayan\",\n  \"phoneNumber\": \"08031234567\",\n  \"amount\": 35000,\n  \"type\": \"owe_me\",\n  \"dueDate\": \"2026-10-15T00:00:00.000Z\",\n  \"notes\": \"Aso ebi contribution balance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/debts",
+              "host": ["{{base_url}}"],
+              "path": ["debts"]
+            }
+          }
+        },
+        {
+          "name": "2. Create Debt (i_owe - I owe someone)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('Debt record created with type i_owe', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('success');",
+                  "    pm.expect(jsonData.data.type).to.eql('i_owe');",
+                  "    pm.environment.set('debtId_i_owe', jsonData.data._id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"debtorName\": \"Bisi Catering Services\",\n  \"phoneNumber\": \"07098765432\",\n  \"amount\": 15000,\n  \"type\": \"i_owe\",\n  \"dueDate\": \"2026-09-30T00:00:00.000Z\",\n  \"notes\": \"Deposit for party drinks\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/debts",
+              "host": ["{{base_url}}"],
+              "path": ["debts"]
+            }
+          }
+        },
+        {
+          "name": "3. Get Debts List & Debtor Balance Summary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Summary contains totalOwedToMe, totalIOwe, and netBalance', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.summary).to.have.property('totalOwedToMe');",
+                  "    pm.expect(jsonData.summary).to.have.property('totalIOwe');",
+                  "    pm.expect(jsonData.summary).to.have.property('netBalance');",
+                  "    pm.expect(jsonData.summary.netBalance).to.eql(jsonData.summary.totalOwedToMe - jsonData.summary.totalIOwe);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts",
+              "host": ["{{base_url}}"],
+              "path": ["debts"]
+            }
+          }
+        },
+        {
+          "name": "4. Get Single Debt Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Debt record matches debtId_owe_me', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data._id).to.eql(pm.environment.get('debtId_owe_me'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts/{{debtId_owe_me}}",
+              "host": ["{{base_url}}"],
+              "path": ["debts", "{{debtId_owe_me}}"]
+            }
+          }
+        },
+        {
+          "name": "5. Trigger WhatsApp Nudge (owe_me Debt)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('WhatsApp deep link generated with formatted Nigerian phone number', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.nudgeUrl).to.include('wa.me/2348031234567');",
+                  "    pm.expect(jsonData.remindersSentCount).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts/{{debtId_owe_me}}/nudge",
+              "host": ["{{base_url}}"],
+              "path": ["debts", "{{debtId_owe_me}}", "nudge"]
+            }
+          }
+        },
+        {
+          "name": "6. Trigger WhatsApp Nudge Safeguard Check (i_owe Debt - Should Fail 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test('Returns safeguard message for i_owe debt', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('fail');",
+                  "    pm.expect(jsonData.message).to.include('Cannot send a collection nudge for money you owe');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts/{{debtId_i_owe}}/nudge",
+              "host": ["{{base_url}}"],
+              "path": ["debts", "{{debtId_i_owe}}", "nudge"]
+            }
+          }
+        },
+        {
+          "name": "7. Settle Debt Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('isSettled is set to true', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data.isSettled).to.eql(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts/{{debtId_owe_me}}/settle",
+              "host": ["{{base_url}}"],
+              "path": ["debts", "{{debtId_owe_me}}", "settle"]
+            }
+          }
+        },
+        {
+          "name": "8. Delete Debt Record",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Debt deleted successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('deleted successfully');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debts/{{debtId_i_owe}}",
+              "host": ["{{base_url}}"],
+              "path": ["debts", "{{debtId_i_owe}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
