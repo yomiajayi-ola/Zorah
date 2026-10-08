@@ -109,3 +109,120 @@ export const addEsusuContribution = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// @desc Get all public/discoverable Esusu groups (Paginated & Searchable)
+export const getAllEsusuGroups = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+    const { search, frequency, active } = req.query;
+
+    const query = {};
+
+    if (active !== undefined) {
+      query.active = active === "true";
+    } else {
+      query.active = true;
+    }
+
+    if (frequency && ["daily", "weekly", "monthly"].includes(frequency)) {
+      query.frequency = frequency;
+    }
+
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+
+    const total = await EsusuGroup.countDocuments(query);
+    const groups = await EsusuGroup.find(query)
+      .populate("creator", "name email")
+      .populate("members.user", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({
+      success: true,
+      count: groups.length,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+      data: groups,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc Get Esusu groups where authenticated user is creator or member
+export const getUserGroups = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const groups = await EsusuGroup.find({
+      $or: [
+        { creator: userId },
+        { "members.user": userId }
+      ]
+    })
+      .populate("creator", "name email")
+      .populate("members.user", "name email")
+      .sort({ createdAt: -1 });
+
+    let totalExpectedPayouts = 0;
+
+    const formattedGroups = groups.map((group) => {
+      const gObj = group.toObject();
+      const isCreator = group.creator._id.toString() === userId.toString();
+      
+      // Find current user's membership details
+      const myMemberObj = group.members.find(
+        (m) => m.user && m.user._id.toString() === userId.toString()
+      );
+
+      // Find next member scheduled for payout
+      const nextRecipient = group.members.find(
+        (m) => !m.hasReceived && m.payoutStatus !== "paid"
+      );
+
+      const totalPoolAmount = group.contributionAmount * group.members.length;
+
+      if (myMemberObj && !myMemberObj.hasReceived) {
+        totalExpectedPayouts += totalPoolAmount;
+      }
+
+      return {
+        ...gObj,
+        isCreator,
+        myMembership: myMemberObj
+          ? {
+              order: myMemberObj.order || null,
+              hasReceived: myMemberObj.hasReceived || false,
+              payoutStatus: myMemberObj.payoutStatus || "pending",
+              payoutAttempts: myMemberObj.payoutAttempts || 0,
+            }
+          : null,
+        totalPoolAmount,
+        nextRecipient: nextRecipient
+          ? {
+              user: nextRecipient.user,
+              order: nextRecipient.order,
+            }
+          : null,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      summary: {
+        totalGroups: groups.length,
+        totalExpectedPayouts,
+      },
+      count: formattedGroups.length,
+      data: formattedGroups,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
