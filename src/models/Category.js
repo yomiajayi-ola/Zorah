@@ -18,4 +18,7 @@ const categorySchema = new mongoose.Schema({
   subcategories: [subCategorySchema]           
 }, { timestamps: true });
 
+// Enforce one category document per type
+categorySchema.index({ type: 1 }, { unique: true });
+
 export default mongoose.model('Category', categorySchema);
