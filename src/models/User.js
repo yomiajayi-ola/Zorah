@@ -135,13 +135,14 @@ userSchema.methods.incrementUsage = async function(type) {
   // Force Mongoose to see the nested change
   this.markModified('usageMetrics');
 
-  // Logic: If they hit the limit, lock it
-  if (this.usageMetrics.aiSessionsCount >= 2 || this.usageMetrics.expensesLoggedCount >= 5) {
+  // Free tier limits: 50 AI sessions / 5 expenses before prompting upgrade
+  if (this.usageMetrics.aiSessionsCount >= 50 || this.usageMetrics.expensesLoggedCount >= 5) {
       this.usageMetrics.isFeatureLocked = true;
   }
 
   await this.save();
   return this.usageMetrics.isFeatureLocked;
 };
+
 
 export default mongoose.model("User", userSchema);

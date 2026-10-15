@@ -1,46 +1,26 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { 
-    GoogleGenerativeAI, 
-    HarmCategory, 
-    HarmBlockThreshold 
-} from "@google/generative-ai"; 
+import {
+    GoogleGenerativeAI,
+    HarmCategory,
+    HarmBlockThreshold
+} from "@google/generative-ai";
 
 import { detectIntent } from "./intent.js";
 import { getFinancialData } from "./processor.js";
 import { systemPrompt } from "./prompt.js";
-import User from "../models/User.js"; // Required for usage tracking
-
-// 🔄 Retry Logic Wrapper for Gemini API calls
-async function callGeminiWithRetry(ai, modelName, systemPrompt, payload) {
-    const maxRetries = 3;
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            const model = ai.getGenerativeModel({ 
-                model: modelName,
-                systemInstruction: systemPrompt
-            });
-            const result = await model.generateContent(payload);
-            return result;
-        } catch (error) {
-            if (error.status === 429) {
-                const rateLimitError = new Error("RATE_LIMIT_EXCEEDED");
-                rateLimitError.status = 429;
-                throw rateLimitError;
-            }
-            
-            console.error(`Attempt ${i + 1} failed:`, error.message);
-            if (i === maxRetries - 1) throw error;
-            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); 
-        }
-    }
-}
+import { retryGeminiRequest } from "../utils/geminiRetry.js";
+import User from "../models/User.js";
 
 export const aiAssistant = async (req, res) => {
     try {
         const userId = req.user.id;
         const { message } = req.body;
+
+        if (!message || !message.trim()) {
+            return res.status(400).json({ status: "fail", message: "Message is required." });
+        }
 
         const user = await User.findById(userId);
         if (!user) {
@@ -48,12 +28,18 @@ export const aiAssistant = async (req, res) => {
         }
 
         const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        
-        // 2. Detect intent & fetch data
-        const intent = detectIntent(message);
-        const financialData = await getFinancialData(intent, userId);
+        const model = ai.getGenerativeModel({
+            model: "models/gemini-2.5-flash",
+            systemInstruction: systemPrompt
+        });
 
-        console.log("DEBUG: Data sent to Gemini ->", JSON.stringify(financialData, null, 2));
+        // Detect intent & fetch financial context data in parallel
+        const [intent, financialData] = await Promise.all([
+            Promise.resolve(detectIntent(message)),
+            getFinancialData(detectIntent(message), userId)
+        ]);
+
+        console.log("DEBUG: Intent ->", intent, "| Data keys ->", Object.keys(financialData));
 
         const payload = {
             contents: [
@@ -76,29 +62,31 @@ export const aiAssistant = async (req, res) => {
             ]
         };
 
-        // 3. Generate response
-        const response = await callGeminiWithRetry(ai, "models/gemini-2.5-flash", systemPrompt, payload);
+        // Use shared retry utility (handles 429 & 503 with exponential backoff)
+        const response = await retryGeminiRequest(
+            () => model.generateContent(payload)
+        );
 
         let replyText = response?.response?.text() || "";
         let responseStatus = "success";
-        let finishReason = response.candidates?.[0]?.finishReason || "UNKNOWN";
-        
+        const finishReason = response?.response?.candidates?.[0]?.finishReason || "UNKNOWN";
+
         if (!replyText) {
             responseStatus = "failed";
             if (finishReason === "SAFETY") {
-                replyText = `I apologize, but the response was blocked by safety filters. Please try rephrasing your request.`;
+                replyText = "I apologize, but that response was blocked by safety filters. Please try rephrasing your request.";
             } else if (finishReason === "MAX_TOKENS") {
-                replyText = `The request was too large for the model to process. Try asking a shorter question.`;
+                replyText = "The request was too large for me to process. Try asking a shorter question.";
             } else {
                 replyText = `I ran into an internal issue while generating the analysis (${finishReason}). Please try again shortly.`;
             }
-            console.warn("Final Gemini Response Failure:", finishReason, response.candidates);
+            console.warn("Final Gemini Response Failure:", finishReason);
         }
 
-        // 📈 4. INCREMENT USAGE: Only if the session was successful
+        // Increment usage only on successful responses
         if (responseStatus === "success" && replyText) {
-            await user.incrementUsage('ai'); 
-            console.log(`[USAGE_TRACKER] AI session +1 for ${userId}. Current Count: ${user.usageMetrics.aiSessionsCount}`);
+            await user.incrementUsage('ai');
+            console.log(`[USAGE_TRACKER] AI session +1 for ${userId}. Count: ${user.usageMetrics.aiSessionsCount}`);
         }
 
         return res.json({
@@ -108,7 +96,7 @@ export const aiAssistant = async (req, res) => {
         });
 
     } catch (err) {
-        console.error("Gemini Assistant Error:", err);
+        console.error("Gemini Assistant Error:", err.status || err.code, err.message);
 
         if (err.status === 429) {
             return res.status(429).json({
@@ -118,6 +106,18 @@ export const aiAssistant = async (req, res) => {
             });
         }
 
-        res.status(500).json({ error: "AI Assistant failed", details: err.message });
+        if (err.status === 503) {
+            return res.status(503).json({
+                status: "failed",
+                reply: "I'm temporarily unavailable. Please try again in a few seconds.",
+                intent: "service-unavailable"
+            });
+        }
+
+        return res.status(500).json({
+            status: "error",
+            reply: "Something went wrong on my end. Please try again.",
+            details: err.message
+        });
     }
 };
