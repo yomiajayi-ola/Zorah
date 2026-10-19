@@ -1,41 +1,50 @@
 import express from "express";
-import { processEsusuPayouts } from "../controllers/esusuPayoutController.js";
-import { retryFailedPayouts } from "../controllers/esusuRetryController.js";
+import { protect } from "../middlewares/auth.middleware.js";
 import EsusuGroup from "../models/EsusuGroup.js";
 
 const router = express.Router();
 
-// 1️ Trigger payout manually
-router.post("/process", async (req, res) => {
+/**
+ * @route   GET /api/esusu/payouts/:groupId/history
+ * @desc    View payout history for a specific Esusu group
+ * @access  Private — must be a member or creator of the group
+ */
+router.get("/:groupId/history", protect, async (req, res) => {
   try {
-    const results = await processEsusuPayouts();
-    res.status(200).json({ message: "Payouts processed", results });
+    const userId = req.user._id;
+
+    const group = await EsusuGroup.findById(req.params.groupId)
+      .populate("payoutHistory.member", "firstName lastName email")
+      .populate("members.user", "firstName lastName email")
+      .populate("creator", "firstName lastName email");
+
+    if (!group) {
+      return res.status(404).json({ success: false, message: "Group not found" });
+    }
+
+    // Only members or the creator can view payout history
+    const isMember = group.members.some(
+      (m) => m.user && m.user._id.toString() === userId.toString()
+    );
+    const isCreator = group.creator._id.toString() === userId.toString();
+
+    if (!isMember && !isCreator) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. You must be a member of this group to view its payout history.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      groupName: group.name,
+      currentRound: group.currentRound,
+      totalMembers: group.members.length,
+      payoutHistory: group.payoutHistory || [],
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// 2️ Retry failed payouts
-router.post("/retry", async (req, res) => {
-    try {
-      const results = await retryFailedPayouts();
-      res.status(200).json({ message: "Retry completed", results });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-  
-  // 3️ View payout history (for a specific group)
-  router.get("/:groupId/history", async (req, res) => {
-    try {
-      const group = await EsusuGroup.findById(req.params.groupId)
-        .populate("payoutHistory.member", "name email")
-        .populate("members.user", "name email");
-      if (!group) return res.status(404).json({ message: "Group not found" });
-      res.json({ payoutHistory: group.payoutHistory });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 
 export default router;
