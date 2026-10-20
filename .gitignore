@@ -2,13 +2,5 @@ node_modules
 .env*
 scratch/
 *.pem
-!.env.example.figma.env
+!.env.example
 .figma.env
-
-.figma.env
-*.env
-.env*
-
-.figma.env
-*.env
-.env*
