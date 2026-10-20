@@ -163,9 +163,10 @@ export const getAllEsusuGroups = async (req, res) => {
         const { search, frequency } = req.query;
 
         // Only return public, active groups
+        // Use $ne:false so legacy groups (created before these fields existed) are included
         const query = {
-            isPublic: true,
-            active: true,
+            isPublic: { $ne: false },
+            active: { $ne: false },
         };
 
         if (frequency && ["daily", "weekly", "monthly"].includes(frequency)) {
