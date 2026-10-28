@@ -394,13 +394,34 @@ export const respondToInvite = handle(async (req, res) => {
     res.json({ success: true, message: action === "accept" ? "Group joined successfully" : "Group declined successfully", data: { groupId: group._id, status: me.status, order: me.order ?? null } });
 });
 
+/** Withdraws a pending invite. Marked "revoked" (not "removed") so addInvites can re-invite later. */
+const revokePendingInvite = async (group, m, res) => {
+    if (group.status !== "pending") throw httpError("Invites can only be revoked before the group starts", 409);
+    m.status = "revoked";
+    m.respondedAt = new Date();
+    await group.save();
+    notify(m.user, "Esusu invite withdrawn", `Your invite to "${group.name}" was withdrawn.`);
+    res.json({ success: true, message: "Invite revoked", data: { groupId: group._id, userId: m.user, status: "revoked" } });
+};
+
+// @route DELETE /api/esusu/:id/invites/:userId
+export const revokeInvite = handle(async (req, res) => {
+    const group = await loadGroup(req.params.id);
+    assertCreator(group, req.user._id);
+    const m = group.findMember(req.params.userId);
+    if (!m || m.status !== "invited") throw httpError("No pending invite found for this user", 404);
+    await revokePendingInvite(group, m, res);
+});
+
 // @route DELETE /api/esusu/:id/members/:userId
+// Pending invitees are revoked (re-invitable); joined members are removed permanently.
 export const removeMember = handle(async (req, res) => {
     const group = await loadGroup(req.params.id);
     assertCreator(group, req.user._id);
     if (String(req.params.userId) === String(req.user._id)) throw httpError("The creator cannot remove themselves. Cancel the group instead.", 409);
     const m = group.findMember(req.params.userId);
     if (!m || !["joined", "invited"].includes(m.status)) throw httpError("Member not found in this group", 404);
+    if (m.status === "invited") return revokePendingInvite(group, m, res);
 
     if (group.status === "active") {
         if (m.hasReceived) throw httpError("This member has already received a payout and must complete their contributions before removal", 409);
@@ -550,7 +571,7 @@ export const getGroup = handle(async (req, res) => {
             summary: groupSummary(group),
             nextPicker: nextPickerView(group),
             invites: isCreator(group, uid)
-                ? group.members.filter((m) => m.invitedAt).map((m) => ({
+                ? group.members.filter((m) => m.invitedAt && ["joined", "invited"].includes(m.status)).map((m) => ({
                       user: { _id: m.user?._id, firstName: m.user?.firstName, lastName: m.user?.lastName, avatar: m.user?.avatar ?? null },
                       status: m.status === "invited" ? "pending" : m.status,
                       invitedAt: m.invitedAt,

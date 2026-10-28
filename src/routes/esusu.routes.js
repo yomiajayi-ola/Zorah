@@ -20,6 +20,7 @@ import {
   inviteMembers,
   respondToInvite,
   removeMember,
+  revokeInvite,
   leaveGroup,
   // Contributions
   addEsusuContribution,
@@ -75,6 +76,9 @@ router.post("/:id/invites", protect, inviteMembers);
 
 // POST /api/esusu/:id/invites/respond      → invited user accepts / declines
 router.post("/:id/invites/respond", protect, respondToInvite);
+
+// DELETE /api/esusu/:id/invites/:userId    → creator revokes a pending invite (user can be re-invited)
+router.delete("/:id/invites/:userId", protect, revokeInvite);
 
 // ── Members ───────────────────────────────────────────────────────────────────
 // DELETE /api/esusu/:id/members/:userId    → creator removes a member

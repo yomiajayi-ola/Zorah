@@ -14,7 +14,8 @@ import crypto from "crypto";
  * `active` (boolean) is kept in sync for legacy queries/clients.
  */
 
-export const MEMBER_STATUSES = ["invited", "joined", "declined", "removed", "left"];
+// "revoked" = pending invite withdrawn by the creator (re-invitable); "removed" = joined member kicked out (permanent)
+export const MEMBER_STATUSES = ["invited", "joined", "declined", "revoked", "removed", "left"];
 export const GROUP_STATUSES = ["pending", "active", "completed", "cancelled"];
 export const PICKER_TYPES = ["rotating", "automatic", "manual"];
 export const FREQUENCIES = ["daily", "weekly", "biweekly", "monthly"];
