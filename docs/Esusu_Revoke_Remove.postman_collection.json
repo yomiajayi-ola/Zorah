@@ -1,0 +1,69 @@
+{
+  "info": {
+    "name": "Esusu – Revoke & Remove Members",
+    "description": "Set baseURL to https://staging-api.getzorah.com/api/ (or prod). Fill tokenA (creator), tokenB (invitee), userB (invitee _id). groupId is saved automatically by '1. Create Group'.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseURL", "value": "https://staging-api.getzorah.com/api/" },
+    { "key": "tokenA", "value": "" },
+    { "key": "tokenB", "value": "" },
+    { "key": "userB", "value": "" },
+    { "key": "groupId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Create Group (A)",
+      "event": [{ "listen": "test", "script": { "exec": ["pm.collectionVariables.set('groupId', pm.response.json().data._id);"] } }],
+      "request": {
+        "method": "POST",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseURL}}esusu/create",
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Revoke Test Circle\",\n  \"contributionAmount\": 5000,\n  \"frequency\": \"monthly\",\n  \"maxMembers\": 5,\n  \"isPublic\": false,\n  \"inviteUserIds\": [\"{{userB}}\"]\n}" }
+      }
+    },
+    {
+      "name": "2. Get Group (A)",
+      "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] }, "url": "{{baseURL}}esusu/{{groupId}}" }
+    },
+    {
+      "name": "3. Revoke Invite (A) – NEW",
+      "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] }, "url": "{{baseURL}}esusu/{{groupId}}/invites/{{userB}}" }
+    },
+    {
+      "name": "4. Re-invite (A)",
+      "request": {
+        "method": "POST",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseURL}}esusu/{{groupId}}/invites",
+        "body": { "mode": "raw", "raw": "{\n  \"userIds\": [\"{{userB}}\"]\n}" }
+      }
+    },
+    {
+      "name": "5. Remove Member (A) – revokes if pending, removes if joined",
+      "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] }, "url": "{{baseURL}}esusu/{{groupId}}/members/{{userB}}" }
+    },
+    {
+      "name": "6. Accept Invite (B)",
+      "request": {
+        "method": "POST",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenB}}" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseURL}}esusu/{{groupId}}/invites/respond",
+        "body": { "mode": "raw", "raw": "{\n  \"action\": \"accept\"\n}" }
+      }
+    },
+    {
+      "name": "7. Try Rejoin (B) – expect 403 after removal",
+      "request": {
+        "method": "POST",
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenB}}" }] },
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{baseURL}}esusu/join",
+        "body": { "mode": "raw", "raw": "{\n  \"groupId\": \"{{groupId}}\"\n}" }
+      }
+    }
+  ]
+}
